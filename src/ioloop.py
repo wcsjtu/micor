@@ -2,7 +2,7 @@
 from time import time
 from functools import partial
 from collections import defaultdict, deque
-from gen import Future
+from .gen import Future
 
 class SelectImpl:
 
