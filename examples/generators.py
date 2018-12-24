@@ -32,6 +32,6 @@ if __name__ == "__main__":
     try:
         g.throw(RuntimeError, "wtf")                           # 第三次yield的赋值操作
     except StopIteration as err:
-        print("MAIN: %s\n" % ("gen returns %s" % err.message))
+        print("MAIN: %s\n" % ("gen returns %s" % str(err)))
 
     print("MAIN: %s\n" % "unreachable code")
