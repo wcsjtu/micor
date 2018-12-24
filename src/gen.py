@@ -1,8 +1,17 @@
 #coding:utf8
+import time
 from types import GeneratorType
 from functools import partial, wraps
 
 class EventList:
+
+    _instance = None
+
+    @classmethod
+    def current(cls):
+        if not cls._instance:
+            cls._instance = cls()
+        return cls._instance
 
     def __init__(self):
         self._ready = []
@@ -12,10 +21,26 @@ class EventList:
         fn = partial(cb, *args, **kw)
         self._ready.append(fn)
 
+    def add_timer(self, timer):
+        self._not_ready.append(timer)
+
+    def _check_not_ready(self):
+        now = time.time()
+        notready = []
+        while self._not_ready:
+            timer = self._not_ready.pop()
+            if timer.due <= now:
+                self._ready.append(timer.callback)
+            else:
+                notready.append(timer)
+        self._not_ready = notready
+
     def run(self):
-        while self._ready:
-            cb = self._ready.pop()
-            cb()
+        while (self._ready or self._not_ready):
+            self._check_not_ready()
+            if self._ready:
+                cb = self._ready.pop()
+                cb()
 
     
 class Future:
@@ -37,6 +62,28 @@ class Future:
         for cb in self._callbacks:
             cb(self)
 
+
+class Timer:
+
+    def __init__(self, due, callback):
+        self.due = due
+        self.callback = callback
+        self.register()
+
+    def __lt__(self, other):
+        return self.due < other.due
+
+    def __le__(self, other):
+        return self.due <= other.due
+
+    def register(self):
+        EventList.current().add_timer(self)
+
+def sleep(timeout):
+    future = Future()
+    due = time.time() + timeout
+    Timer(due, lambda: future.set_result(None))
+    return future
 
 def _next(gen, future, value=None):
     try:
@@ -62,7 +109,7 @@ def coroutine(func):
 
 if __name__ == "__main__":
     
-    events = EventList()
+    events = EventList.current()
 
     case1 = [1, 2, 3, 4, 5, 6]
     case2 = ["a", "b", "c", "d", "e", "f", "g"]
@@ -73,7 +120,7 @@ if __name__ == "__main__":
             future = Future()
             events.add_callback(lambda: future.set_result(None))
             print(v)
-            yield future
+            yield sleep(1)
 
     show(case1)
     show(case2)
