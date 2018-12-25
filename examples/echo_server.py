@@ -1,15 +1,14 @@
 #coding:utf8
-
 import sys
 sys.path.insert(0, "..")
 
 from src.ioloop import IOLoop, sleep
 from src.gen import Future, coroutine
-from src.handler import Server, Connection, TCPClient
+from src.handler import TCPServer, Connection, TCPClient
 from src.utils import tobytes
 
 
-class EchoServer(Server):
+class EchoServer(TCPServer):
 
     @coroutine
     def handle_conn(self, conn, addr):
@@ -27,6 +26,6 @@ class EchoServer(Server):
 
 if __name__ == "__main__":
     loop = IOLoop.current()
-    server = EchoServer("0.0.0.0", 9111, 128, loop=loop)
+    server = EchoServer("0.0.0.0", 9111, loop=loop)
     print("listen 0.0.0.0:9111")
     loop.run()

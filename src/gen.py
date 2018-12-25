@@ -34,7 +34,7 @@ class Future(object):
                 cb(self)
             except Exception:
                 print('Exception in callback %r for %r' % (cb, self))
-        self._callbacks = None
+        self._callbacks = []
 
 
 def _next(gen, future, value=None):
@@ -49,9 +49,10 @@ def _next(gen, future, value=None):
         fut.add_done_callback(lambda value: _next(gen, future, value))
     except StopIteration as e:
         future.set_result(e.value)
-    except Exception:
+    except Exception as exc:
         future.set_exc_info(sys.exc_info())
         import traceback
+        print(exc)
         traceback.print_tb(sys.exc_info()[2])
 
 def coroutine(func):

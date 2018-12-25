@@ -5,11 +5,11 @@ sys.path.insert(0, "..")
 from urllib.parse import urlsplit
 from src.ioloop import IOLoop, sleep
 from src.gen import Future, coroutine
-from src.handler import Server, Connection, TCPClient
+from src.handler import TCPServer, Connection, TCPClient
 from src.utils import tobytes
 
 
-class SimpleHTTPServer(Server):
+class SimpleHTTPServer(TCPServer):
 
     def response_builder(self, code, data):
         assert code == 200      # 懒得处理其他情况了
@@ -32,7 +32,7 @@ class SimpleHTTPServer(Server):
 
 if __name__ == "__main__":
     loop = IOLoop.current()
-    server = SimpleHTTPServer("0.0.0.0", 9111, 128, loop=loop)
+    server = SimpleHTTPServer("0.0.0.0", 9111, loop=loop)
     print("listen 0.0.0.0:9111")
     loop.run()
 

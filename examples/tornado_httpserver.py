@@ -1,22 +1,33 @@
 #coding:utf8
-import tornado
-import tornado.web
-from tornado.web import RequestHandler
-from tornado.web import Application
+from tornado.ioloop import IOLoop
+from tornado.tcpserver import TCPServer
+from tornado.iostream import StreamClosedError
+from tornado import gen
 
-class Greeting(RequestHandler):
+class Greeting(TCPServer):
 
-    def get(self, *args, **kwargs):
-        self.write(b"hello world")
-        self.finish()
+    @gen.coroutine
+    def handle_stream(self, stream, address):
+        data = yield stream.read_until(b'\r\n\r\n')
+        res = self.response_builder(200, b"hello world")
+        yield stream.write(res)
+        stream.close()
+
+    def response_builder(self, code, data):
+        assert code == 200      # 懒得处理其他情况了
+        resp = b"HTTP/1.1 200 OK\r\n"\
+        b"Content-Type: text/html; charset=utf-8\r\n"\
+        b"Server: mirco\r\n"\
+        b"Content-Length: %d\r\n"\
+        b"\r\n"\
+        b"%s" % (len(data), data)
+        return resp
 
 
 if __name__ == "__main__":
-    app = Application(
-        [(r"^/$", Greeting)]
-    )
-    app.listen(9112, "0.0.0.0")
-    tornado.ioloop.IOLoop.current().start()
+    server = Greeting()
+    server.listen(9112)
+    IOLoop.current().start()
 
 """
 ab -n 100 -c 10 http://localhost:9112/

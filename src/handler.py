@@ -34,6 +34,69 @@ class BaseHandler:
         self._loop.register(self._sock, events, cb)
 
 
+class _ServerHandler(BaseHandler):
+
+    def __init__(self, 
+            ip: str,
+            port: int,
+            backlog: int=128,
+            loop: IOLoop=None,
+            **sockopt):
+        if not loop:
+            loop = IOLoop.current()
+        super().__init__(loop)
+        self._addr = (ip, port)
+        self.backlog = backlog
+        self._sock = self.create_sock(**sockopt)
+        self.register()
+
+    def create_sock(self, **sockopt):
+        addrs = socket.getaddrinfo(self._addr[0], self._addr[1])
+        if not addrs:
+            raise Exception("can't get addrinfo for %s:%d" % self._addr)
+        af, socktype, proto, canonname, sa = addrs[0]
+
+        sock = socket.socket(af, socktype, proto)
+        sock = self.set_socketopt(sock, **sockopt)
+        sock.bind(tuple(sa))
+        sock.setblocking(False)
+        sock.listen(self.backlog)
+        return sock
+
+    def set_socketopt(self, sock, **opt):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return sock
+
+
+class UDPServer(_ServerHandler):
+
+    def __init__(self, ip, port, backlog=128, loop=None, **sockopt):
+        super().__init__(ip, port, backlog, loop, **sockopt)
+
+    def handle(self, sock, fd, events):
+        if events & self._loop.ERROR:
+            self.close()
+            raise Exception('server_socket error')
+        try:
+            data, addr = self._sock.recvfrom()
+            print("accept %s:%d" % addr)
+            h = Datagram(sock, addr, data, self._loop)
+            future = self.handle_datagram(h, addr)
+
+            def cb(f):
+                return f.result() if f else None
+
+            if future is not None:
+                self._loop.add_future(future, cb)
+
+        except (OSError, IOError) as exc:
+            print("accept error: ", exc)
+
+    @coroutine
+    def handle_datagram(self, datagram, addr):
+        raise NotImplementedError("duty of subclass")
+
+
 class Connection(BaseHandler):
 
     def __init__(self, sock, addr, loop):
@@ -44,10 +107,12 @@ class Connection(BaseHandler):
         self._wbsize = 0
         self._rbuf = deque()
         self._rbsize = 0
+        self._closed = False
 
     def close(self):
         super().close()
-        self._wbuf, self._rbuf = None, None
+        self._closed = True
+        self._wbuf, self._rbuf = deque(), deque()
 
     @property
     def events(self):
@@ -130,6 +195,7 @@ class Connection(BaseHandler):
 
     @coroutine
     def write(self, data):
+        # print(self._closed)
         self._wbuf.append(data)
         self._wbsize += len(data)
         while self._wbsize:
@@ -139,23 +205,23 @@ class Connection(BaseHandler):
             num = yield f
             self._loop.unregister(self._sock)
 
-class Server(BaseHandler):
 
-    def __init__(self, ip: str, port: int, backlog: int, loop):
-        super(Server, self).__init__(loop)
-        self._addr = (ip, port)
-        self.backlog = backlog
-        self._loop = loop
-        self._sock = self.create_sock()
-        self.register()
+class Datagram(BaseHandler):
 
-    def create_sock(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(self._addr)
-        s.setblocking(False)
-        s.listen(self.backlog)
-        return s
+    def __init__(self, sock, addr, data, loop):
+        super().__init__(loop)
+        self._sock = sock
+        self._addr = addr
+        self._rbuf = [data]
+
+    def read(self):
+        return self._rbuf[0]
+
+
+class TCPServer(_ServerHandler):
+
+    def __init__(self, ip, port, backlog=128, loop=None, **sockopt):
+        super().__init__(ip, port, backlog, loop, **sockopt)
 
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
@@ -163,7 +229,7 @@ class Server(BaseHandler):
             raise Exception('server_socket error')
         try:
             conn, addr = self._sock.accept()
-            print("accept %s:%d" % addr)
+            # print("accept %s:%d" % addr)
             h = Connection(conn, addr, self._loop)
             future = self.handle_conn(h, addr)
 

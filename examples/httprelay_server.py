@@ -1,18 +1,17 @@
 #coding:utf8
-
 import sys
 sys.path.insert(0, "..")
 
 from urllib.parse import urlsplit
 from src.ioloop import IOLoop, sleep
 from src.gen import Future, coroutine
-from src.handler import Server, Connection, TCPClient
+from src.handler import TCPServer, Connection, TCPClient
 from src.utils import tobytes
 
 from blockio import http_frame
 
 
-class Relay(Server):
+class Relay(TCPServer):
 
     """
     example:
@@ -45,6 +44,6 @@ class Relay(Server):
 
 if __name__ == "__main__":
     loop = IOLoop.current()
-    server = Relay("0.0.0.0", 9111, 128, loop=loop)
+    server = Relay("0.0.0.0", 9111, loop=loop)
     print("listen 0.0.0.0:9111")
     loop.run()
