@@ -99,7 +99,7 @@ class IOLoop:
         try:
             self._impl.unregister(fd)
         except Exception as err:
-            print("Error deleting fd from IOLoop: ", err)
+            pass
 
     def mod_register(self, sock, events):
         fd = sock.fileno()
