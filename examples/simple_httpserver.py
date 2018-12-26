@@ -23,11 +23,14 @@ class SimpleHTTPServer(TCPServer):
 
     @coroutine
     def handle_conn(self, conn, addr):
-        data = yield conn.read_until(b'\r\n\r\n')
-        res = self.response_builder(200, b"hello world")
-        count = yield conn.write(res)
+        while True:
+            data = yield conn.read_until(b'\r\n\r\n')
+            if not data:
+                break
+            res = self.response_builder(200, b"hello world")
+            yield conn.write(res)
         conn.close()
-        return count
+        return 0
 
 
 if __name__ == "__main__":

@@ -51,17 +51,17 @@ class _ServerHandler(BaseHandler):
         self.register()
 
     def create_sock(self, **sockopt):
-        addrs = socket.getaddrinfo(self._addr[0], self._addr[1])
-        if not addrs:
-            raise Exception("can't get addrinfo for %s:%d" % self._addr)
+        addrs = self.getaddrinfo()
         af, socktype, proto, canonname, sa = addrs[0]
 
         sock = socket.socket(af, socktype, proto)
         sock = self.set_socketopt(sock, **sockopt)
         sock.bind(tuple(sa))
         sock.setblocking(False)
-        sock.listen(self.backlog)
         return sock
+
+    def getaddrinfo(self):
+        raise NotImplementedError("duty of subclass")
 
     def set_socketopt(self, sock, **opt):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -73,12 +73,20 @@ class UDPServer(_ServerHandler):
     def __init__(self, ip, port, backlog=128, loop=None, **sockopt):
         super().__init__(ip, port, backlog, loop, **sockopt)
 
+    def getaddrinfo(self):
+        addrs = socket.getaddrinfo(
+            self._addr[0], self._addr[1], 
+            type=socket.SOCK_DGRAM, proto=socket.SOL_UDP)
+        if not addrs:
+            raise Exception("can't get addrinfo for %s:%d" % self._addr)
+        return addrs
+
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
             self.close()
             raise Exception('server_socket error')
         try:
-            data, addr = self._sock.recvfrom()
+            data, addr = self._sock.recvfrom(65535)
             print("accept %s:%d" % addr)
             h = Datagram(sock, addr, data, self._loop)
             future = self.handle_datagram(h, addr)
@@ -214,14 +222,30 @@ class Datagram(BaseHandler):
         self._addr = addr
         self._rbuf = [data]
 
-    def read(self):
+    def read_package(self):
         return self._rbuf[0]
+
+    def write_package(self, pkg):
+        self._sock.sendto(pkg, self._addr)
+
+    def close(self):
+        self._rbuf = []
+        self._addr = tuple()
 
 
 class TCPServer(_ServerHandler):
 
     def __init__(self, ip, port, backlog=128, loop=None, **sockopt):
         super().__init__(ip, port, backlog, loop, **sockopt)
+        self._sock.listen(self.backlog)
+
+    def getaddrinfo(self):
+        addrs = socket.getaddrinfo(
+            self._addr[0], self._addr[1], 
+            type=socket.SOCK_STREAM, proto=socket.SOL_TCP)
+        if not addrs:
+            raise Exception("can't get addrinfo for %s:%d" % self._addr)
+        return addrs
 
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
