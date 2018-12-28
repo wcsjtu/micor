@@ -19,7 +19,7 @@ class Lock:
 
         if not self._locked:
             self._locked = True
-            self._loop.add_callback(lambda f: f.set_result(True), future)
+            self._loop.add_callsoon(lambda f: f.set_result(True), future)
         else:
             self._waiters.append(future)
         yield future
@@ -28,7 +28,7 @@ class Lock:
     @coroutine
     def release(self):
         future = Future()
-        self._loop.add_callback(lambda f: f.set_result(True), future)
+        self._loop.add_callsoon(lambda f: f.set_result(True), future)
         self._locked = bool(self._waiters)
         if self._waiters:
             fut = self._waiters.popleft()

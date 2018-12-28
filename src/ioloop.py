@@ -74,7 +74,7 @@ class IOLoop:
         self._fds = dict()
         self._impl = PollImpl()
 
-    def add_callback(self, callback, *args, **kwargs):
+    def add_callsoon(self, callback, *args, **kwargs):
         fn = partial(callback, *args, **kwargs)
         self._ready.append(fn)
 
@@ -84,7 +84,7 @@ class IOLoop:
     def add_future(self, future, callback):
 
         def cb(fut):
-            return self.add_callback(callback, fut)
+            return self.add_callsoon(callback, fut)
 
         future.add_done_callback(cb)
 
@@ -117,13 +117,13 @@ class IOLoop:
             cb = self._ready.popleft()
             cb()
 
-    def run_due_timer(self):
+    def check_due_timer(self):
         now = time()
         todo = []
         while self._timer:
             timer = self._timer.pop()
             if timer.due <= now:
-                timer.callback()
+                self._ready.append(timer.callback)
             else:
                 todo.append(timer)
         self._timer = todo
@@ -132,7 +132,7 @@ class IOLoop:
         while not self._stop:
             if self._ready:
                 self.run_ready()
-            self.run_due_timer()
+            self.check_due_timer()
             timeout = self.TIMEOUT
             if self._ready:
                 timeout = 0
