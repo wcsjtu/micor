@@ -190,20 +190,19 @@ def show_list(data):        # version 2
 它, 就像汽车的发动机一样, 持续地驱动生成器不断地向下执行, 直到终点。 根据上面的分析, 现在生成器yield出来的是Future对象, 我们需要`gen.send(val)`这样的函数添加到Future对象的回调里去。
 
 ```python
-def _next(gen, future, value=None):
+def _next(gen, value=None):
     # 这里的gen, 就是协程函数调用返回的。 比如说上面的show_list()
-    # future先按住不表
-    # value是send函数的参数, 也是一个Future对象
+    # value是send函数的参数, 是一个Future对象
     try:
         val = value if not value else value._result
         fut = gen.send(val)     # yield出来的是future对象
 
         def cb(v):                  # 当fut代表的事件有了结果后, 就会调用这个函数。
-            _next(gen, future, v)   # 在_next里会调用send方法...
+            _next(gen, v)           # 在_next里会调用send方法...
 
         fut.add_done_callback(cb)  
-    except StopIteration as exc:
-        future.set_result(exc.value)
+    except StopIteration:
+        pass
 ```
 
 那么, 调用生成器函数的代码, 就需要这么写
@@ -212,7 +211,7 @@ def _next(gen, future, value=None):
 def call_gen():
     future = Future()
     gen = show_list()
-    _next(gen, future, None)
+    _next(gen, None)
     return future
 ```
 
@@ -227,7 +226,7 @@ def coroutine(func):
         future = Future()
         gen = func(*args, **kwargs)
         if isinstance(gen, GeneratorType):
-            _next(gen, future)
+            _next(gen)
             return future
         future.set_result(gen)
         return future
@@ -435,6 +434,6 @@ def test():
 - 如果函数是生成器函数, 那么`yield`出来的必须是future对象或者是协程函数, 而且这个函数必须被`coroutine`修饰器修饰
 - 如果函数是普通函数, 那么`return`出来的必须是future对象
 - 在`future`对象被`yield`/`return`出来之前, 需要告诉调度器何时去`set_result`, 调度器只提供了立即执行的接口`add_callsoon`, 具体可以参考sleep的实现过程
-- 如果需要延迟执行, 可以是用`yield sleep(t)`的方式
+- 如果需要延迟执行, 可以用`yield sleep(t)`的方式
 - 不要在协程函数内写阻塞的代码, 比如说time.sleep。不要一直占用CPU, 可以在适当的时候sleep(0)
 - 其他的, 想怎么写就怎么写。

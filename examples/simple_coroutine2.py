@@ -74,13 +74,13 @@ class Future:
         for cb in self._callbacks:
             cb(self)
 
-def _next(gen, future, value=None):
+def _next(gen, value=None):
     try:
         val = value if not value else value._result
         fut = gen.send(val)
-        fut.add_done_callback(lambda v: _next(gen, future, v))
-    except StopIteration as exc:
-        future.set_result(exc.value)
+        fut.add_done_callback(lambda v: _next(gen, v))
+    except StopIteration:
+        pass
 
 def coroutine(func):
     @wraps(func)
@@ -88,7 +88,7 @@ def coroutine(func):
         future = Future()
         gen = func(*args, **kwargs)
         if isinstance(gen, GeneratorType):
-            _next(gen, future)
+            _next(gen)
             return future
         future.set_result(gen)
         return future

@@ -37,7 +37,7 @@ class Future(object):
         self._callbacks = []
 
 
-def _next(gen, future, value=None):
+def _next(gen, value=None):
     try:
         if not value:
             fut = gen.send(value)
@@ -46,13 +46,12 @@ def _next(gen, future, value=None):
                 fut = gen.throw(value._exc_info)
             else:
                 fut = gen.send(value._result)
-        fut.add_done_callback(lambda value: _next(gen, future, value))
-    except StopIteration as e:
-        future.set_result(e.value)
+        fut.add_done_callback(lambda value: _next(gen, value))
+    except StopIteration:
+        pass
     except Exception as exc:
-        future.set_exc_info(sys.exc_info())
-        import traceback
         print(exc)
+        import traceback
         traceback.print_tb(sys.exc_info()[2])
 
 def coroutine(func):
@@ -66,7 +65,7 @@ def coroutine(func):
             return future
         else:
             if isinstance(gen, GeneratorType):
-                _next(gen, future)
+                _next(gen)
                 return future
         future.set_result(gen)
         return future
