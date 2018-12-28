@@ -7,13 +7,8 @@ def gen(data):
     for i in data:
         yield i
 
-netease = create_data("netease", 10)
-tencent = create_data("tencent", 10)
-
-tasks = [
-    gen(netease),
-    gen(tencent)
-]
+netease = create_data("netease", 5)
+tencent = create_data("tencent", 5)
 
 def coroutine():
     gen_netease = gen(netease)
