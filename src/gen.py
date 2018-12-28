@@ -43,7 +43,7 @@ def _next(gen, future, value=None):
             fut = gen.send(value)
         else:
             if value._exc_info:
-                fut = gen.throw(value._exc_info)
+                fut = gen.throw(*value._exc_info)
             else:
                 fut = gen.send(value._result)
         fut.add_done_callback(lambda value: _next(gen, future, value))
