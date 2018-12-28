@@ -1,6 +1,7 @@
 ﻿import sys
 from functools import wraps
 from types import GeneratorType
+import traceback
 
 
 class Future(object):
@@ -29,6 +30,10 @@ class Future(object):
 
     def set_done(self):
         self._done = True
+        if not self._callbacks and self._exc_info:
+            traceback.print_exception(*self._exc_info)
+            return
+            
         for cb in self._callbacks:
             try:
                 cb(self)
@@ -49,11 +54,9 @@ def _next(gen, future, value=None):
         fut.add_done_callback(lambda value: _next(gen, future, value))
     except StopIteration as e:
         future.set_result(e.value)
-    except Exception as exc:
+    except Exception:
         future.set_exc_info(sys.exc_info())
-        import traceback
-        print(exc)
-        traceback.print_tb(sys.exc_info()[2])
+        
 
 def coroutine(func):
     @wraps(func)
