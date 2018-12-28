@@ -192,7 +192,7 @@ def show_list(data):        # version 2
 ```python
 def _next(gen, future, value=None):
     # 这里的gen, 就是协程函数调用返回的。 比如说上面的show_list()
-    # future先按住不表
+    # future就是函数return或者yield出来的那个对象
     # value是send函数的参数, 也是一个Future对象
     try:
         val = value if not value else value._result
@@ -435,6 +435,6 @@ def test():
 - 如果函数是生成器函数, 那么`yield`出来的必须是future对象或者是协程函数, 而且这个函数必须被`coroutine`修饰器修饰
 - 如果函数是普通函数, 那么`return`出来的必须是future对象
 - 在`future`对象被`yield`/`return`出来之前, 需要告诉调度器何时去`set_result`, 调度器只提供了立即执行的接口`add_callsoon`, 具体可以参考sleep的实现过程
-- 如果需要延迟执行, 可以是用`yield sleep(t)`的方式
+- 如果需要延迟执行, 可以用`yield sleep(t)`的方式
 - 不要在协程函数内写阻塞的代码, 比如说time.sleep。不要一直占用CPU, 可以在适当的时候sleep(0)
 - 其他的, 想怎么写就怎么写。
