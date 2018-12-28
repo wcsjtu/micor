@@ -1,5 +1,5 @@
 ﻿import select
-from time import time
+import time
 from functools import partial
 from collections import defaultdict, deque
 from .gen import Future
@@ -118,7 +118,7 @@ class IOLoop:
             cb()
 
     def check_due_timer(self):
-        now = time()
+        now = time.time()
         todo = []
         while self._timer:
             timer = self._timer.pop()
@@ -138,7 +138,7 @@ class IOLoop:
                 timeout = 0
             elif self._timer:
                self._timer.sort()
-               delta = self._timer[0].due - time()
+               delta = self._timer[0].due - time.time()
                timeout = max(0, delta)
             events = self._impl.poll(timeout=timeout)
             for fd, event in events:
@@ -168,6 +168,6 @@ class Timer(object):
 
 def sleep(timeout):
     future = Future()
-    due = time() + timeout
+    due = time.time() + timeout
     Timer(due, lambda: future.set_result(None))
     return future
