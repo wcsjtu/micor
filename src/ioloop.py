@@ -70,7 +70,7 @@ class IOLoop:
     def __init__(self):
         self._stop = False
         self._ready = deque()
-        self._timer = list()
+        self._timers = list()
         self._fds = dict()
         self._impl = PollImpl()
 
@@ -79,7 +79,7 @@ class IOLoop:
         self._ready.append(fn)
 
     def add_timer(self, timer):
-        self._timer.append(timer)
+        self._timers.append(timer)
 
     def add_future(self, future, callback):
 
@@ -108,7 +108,7 @@ class IOLoop:
     def stop(self):
         self._stop = True
         self._ready = None
-        self._timer = list()
+        self._timers = list()
         self._fds = dict()
         self._impl.close()
 
@@ -120,13 +120,13 @@ class IOLoop:
     def check_due_timer(self):
         now = time.time()
         todo = []
-        while self._timer:
-            timer = self._timer.pop()
+        while self._timers:
+            timer = self._timers.pop()
             if timer.due <= now:
                 self._ready.append(timer.callback)
             else:
                 todo.append(timer)
-        self._timer = todo
+        self._timers = todo
 
     def run(self):
         while not self._stop:
@@ -136,9 +136,9 @@ class IOLoop:
             timeout = self.TIMEOUT
             if self._ready:
                 timeout = 0
-            elif self._timer:
-               self._timer.sort()
-               delta = self._timer[0].due - time.time()
+            elif self._timers:
+               self._timers.sort()
+               delta = self._timers[0].due - time.time()
                timeout = max(0, delta)
             events = self._impl.poll(timeout=timeout)
             for fd, event in events:
@@ -154,7 +154,6 @@ class Timer(object):
     def __init__(self, due: float, callback):
         self.due = due
         self.callback = callback
-        self.register()
 
     def __lt__(self, other):
         return self.due < other.due
@@ -169,5 +168,6 @@ class Timer(object):
 def sleep(timeout):
     future = Future()
     due = time.time() + timeout
-    Timer(due, lambda: future.set_result(None))
+    timer = Timer(due, lambda: future.set_result(None))
+    timer.register()
     return future
