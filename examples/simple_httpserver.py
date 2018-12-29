@@ -7,7 +7,7 @@ from src.ioloop import IOLoop, sleep
 from src.gen import Future, coroutine
 from src.handler import TCPServer, Connection, TCPClient
 from src.utils import tobytes
-
+from src.errors import ConnectionClosed
 
 class SimpleHTTPServer(TCPServer):
 
@@ -24,12 +24,12 @@ class SimpleHTTPServer(TCPServer):
     @coroutine
     def handle_conn(self, conn, addr):
         while True:
-            data = yield conn.read_until(b'\r\n\r\n')
-            if not data:
+            try:
+                data = yield conn.read_until(b'\r\n\r\n')
+                res = self.response_builder(200, b"hello world")
+                yield conn.write(res)
+            except ConnectionClosed:
                 break
-            res = self.response_builder(200, b"hello world")
-            yield conn.write(res)
-        conn.close()
         return 0
 
 

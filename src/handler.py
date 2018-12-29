@@ -7,7 +7,7 @@ from .gen import Future, coroutine
 from .utils import errno_from_exception, \
     merge_prefix, tobytes
 from .ioloop import IOLoop
-
+from .import errors
 
 class BaseHandler:
 
@@ -132,13 +132,13 @@ class Connection(BaseHandler):
     def on_read(self, future):
         try:
             data = self._sock.recv(65535)
-            if not data:
-                self.close()
             future.set_result(data)
         except (OSError, IOError) as exc:
             if errno_from_exception(exc) in (
                 errno.ETIMEDOUT, errno.EAGAIN, errno.EWOULDBLOCK):
                 return
+            else:
+                future.set_result(b'')
 
     def on_write(self, future):
         bytes_num = 0
@@ -159,8 +159,8 @@ class Connection(BaseHandler):
                     break
                 else:
                     self.close()
-                    print("send data error: ", exc)
-                    break
+                    print("Write error on %d: %s" % (self._sock.fileno(), exc))
+                    return
         future.set_result(bytes_num)
 
     def handle_events(self, sock, fd, events, future):
@@ -196,14 +196,13 @@ class Connection(BaseHandler):
                     return data
                 else:
                     if len(self._rbuf[0]) >= maxrange:
-                        print("Entity Too Large")
-                        return b""
+                        raise errors.ConnectionClosed("Entity Too Large")
             else:
-                return b""
+                self.close()
+                raise errors.ConnectionClosed()
 
     @coroutine
     def write(self, data):
-        # print(self._closed)
         self._wbuf.append(data)
         self._wbsize += len(data)
         while self._wbsize:
