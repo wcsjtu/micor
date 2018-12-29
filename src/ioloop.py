@@ -101,6 +101,10 @@ class IOLoop:
         except Exception as err:
             pass
 
+    def mod_callback(self, sock, handler):
+        fd = sock.fileno()
+        self._fds[fd] = (sock, handler)
+
     def mod_register(self, sock, events):
         fd = sock.fileno()
         self._impl.modify(fd, events | self.ERROR)
