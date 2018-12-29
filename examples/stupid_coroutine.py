@@ -1,4 +1,4 @@
-#coding:utf8
+#coding:utf-8
 
 def create_data(name, count):
     return ["%s   %d" % (name, i) for i in range(count)]

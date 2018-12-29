@@ -1,4 +1,4 @@
-#coding=utf8
+#coding=utf-8
 
 def gen(name):
     print("GEN : call gen with name=%s" % name)

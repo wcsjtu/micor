@@ -1,4 +1,4 @@
-#coding:utf8
+#coding:utf-8
 from tornado.ioloop import IOLoop
 from tornado.tcpserver import TCPServer
 from tornado.iostream import StreamClosedError
