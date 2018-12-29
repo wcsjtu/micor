@@ -258,7 +258,7 @@ class TCPServer(_ServerHandler):
             future = self.handle_conn(h, addr)
 
             def cb(f):
-                return f.result() if f else None
+                return f.set_result(None) if f else None
 
             if future is not None:
                 self._loop.add_future(future, cb)

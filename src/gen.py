@@ -14,6 +14,11 @@ class Future(object):
         self._result = None
         self._done = False
 
+    def _print_excinfo(self):
+        if self._exc_info:
+            tp, val, tb = self._exc_info
+            traceback.print_exception(tp, val, tb, chain=False)
+
     def add_done_callback(self, callback):
         self._callbacks.append(callback)
 
@@ -30,8 +35,8 @@ class Future(object):
 
     def set_done(self):
         self._done = True
-        if not self._callbacks and self._exc_info:
-            traceback.print_exception(*self._exc_info)
+        if not self._callbacks:
+            self._print_excinfo()
             return
             
         for cb in self._callbacks:
