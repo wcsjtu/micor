@@ -100,15 +100,21 @@ def sleep(timeout):
     Timer(due, lambda: future.set_result(None))
     return future
 
+def now():
+    fmt="%Y-%m-%d %H:%M:%S"
+    ts = time.time()
+    return time.strftime(fmt, time.localtime(ts))
+
+
 @coroutine
-def show_list(data):
+def show_list(data, t):
     for v in data:
-        print(v)
-        future = Future()
-        scheduler.add_callsoon(
-            lambda: future.set_result(None)
-            )
-        yield sleep(0)
+        print(now(), v)
+        # future = Future()
+        # scheduler.add_callsoon(
+        #     lambda: future.set_result(None)
+        #     )
+        yield sleep(t)
 
 @coroutine
 def test():
@@ -117,9 +123,8 @@ def test():
     print(time.time(), " stop")         # 3
 
 if __name__ == "__main__":
-    case1 = [1, 2, 3, 4, 5, 6]
-    case2 = ["a", "b", "c", "d", "e", "f"]
-    show_list(case1)
-    show_list(case2)
-    test()
+    import string
+    show_list(range(100), 2)
+    show_list(string.ascii_letters, 5)
+    #test()
     scheduler.run()
