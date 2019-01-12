@@ -1,3 +1,5 @@
+import socket
+
 
 def errno_from_exception(e):
     if hasattr(e, 'errno'):
@@ -46,3 +48,13 @@ def merge_prefix(deque, size):
 
 def tobytes(s):
     return s.encode("utf8") if type(s) is str else s
+
+
+def ip_type(ip: str) -> int:
+    for family in (socket.AF_INET, socket.AF_INET6):
+        try:
+            socket.inet_pton(family, ip)
+            return family
+        except:
+            continue
+    return 0
