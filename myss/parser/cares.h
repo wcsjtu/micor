@@ -12,6 +12,7 @@
 #endif // DEBUG_DEFINED
 #endif
 #include "structmember.h"
+#include "rc4.h"
 
 typedef struct {
 	PyObject_HEAD
@@ -32,3 +33,6 @@ typedef struct {
 	unsigned int offset;
 } DNSParser;
 
+
+PyObject *
+PyBytes_FromSize(Py_ssize_t size, int use_calloc);

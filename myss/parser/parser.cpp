@@ -16,10 +16,10 @@ extern PyTypeObject RRType;
 #define QCLASS_IN 1
 
 #define DNS_REQ_SIZE(domain_len) (DNS_REQ_HEADER_LEN + \
-	DNS_REQ_TAIL_LEN + domain_len + 1)	//n¸öµã¶ÔÓ¦×Ån+1¶ÎµÄ³¤¶È, ÔÙ¼ÓÉÏ\x00½áÊø·û
+	DNS_REQ_TAIL_LEN + domain_len + 1)	//nä¸ªç‚¹å¯¹åº”ç€n+1æ®µçš„é•¿åº¦, å†åŠ ä¸Š\x00ç»“æŸç¬¦
 
 #define PyBytesObject_SIZE (offsetof(PyBytesObject, ob_sval) + 1)
-#define GET_BYTE(b, i) ( (unsigned char)(*(b->ob_sval + i)) )	//´ÓPyBytesObjectÖÐÈ¡³öbyte
+#define GET_BYTE(b, i) ( (unsigned char)(*(b->ob_sval + i)) )	//ä»ŽPyBytesObjectä¸­å–å‡ºbyte
 
 
 static PyBytesObject *nullstring;
@@ -43,8 +43,8 @@ size_t unpack(char* sd, size_t n){
 	return r;
 }
 
-static PyObject *
-_PyBytes_FromSize(Py_ssize_t size, int use_calloc)
+PyObject *
+PyBytes_FromSize(Py_ssize_t size, int use_calloc)
 {
 	PyBytesObject *op;
 	assert(size >= 0);
@@ -122,7 +122,7 @@ DNSParser_init(DNSParser* self, PyObject *args, PyObject *kwds){
 		return -1;
 	}
 	if (d){
-		tmp = (PyObject*)self->data;	//²»ÄÜÏÈ¼õrefcount
+		tmp = (PyObject*)self->data;	//ä¸èƒ½å…ˆå‡refcount
 		Py_INCREF(d);
 		self->data = (PyBytesObject*)d;
 		Py_XDECREF(tmp);
@@ -142,7 +142,7 @@ DNSParser_forward(DNSParser* self, PyObject* op){
 	Py_RETURN_NONE;
 }
 
-//´ÓrespÖÐ½âÎö³ö³¤¶ÈÖµ, ²¢ÒÆ¶¯offset
+//ä»Žrespä¸­è§£æžå‡ºé•¿åº¦å€¼, å¹¶ç§»åŠ¨offset
 size_t get_count_from_resp(DNSParser* self, size_t n){
 	register size_t res = unpack(self->data->ob_sval + self->offset, n);
 	self->offset += n;
@@ -153,7 +153,7 @@ static PyObject*
 DNSParser_parse_domain(DNSParser* self){
 	register char* data = self->data->ob_sval;
 	register unsigned int up = 0, i = self->offset, part_count = 0;
-	register unsigned int j = 0, copied = 0, domain_length = 0;	//ÓòÃû³¤¶È
+	register unsigned int j = 0, copied = 0, domain_length = 0;	//åŸŸåé•¿åº¦
 	Inteval parts[20] = {};
 
 	while (GET_BYTE(self->data, i) != DOMAIN_END){
@@ -167,22 +167,25 @@ DNSParser_parse_domain(DNSParser* self){
 		up = i + length + 1;
 
 		Inteval part = {i+1, length};
-		*(parts + part_count) = part; part_count++;	//	Ìí¼Óµ½¶ÓÁÐ
+		*(parts + part_count) = part; part_count++;	//	æ·»åŠ åˆ°é˜Ÿåˆ—
 
-		domain_length += (length + 1);	//. ÒªÕ¼Ò»Î»
+		domain_length += (length + 1);	//. è¦å ä¸€ä½
 
 		if (up >= self->offset)
 			self->offset += (length + 1);
 		i = up;
 	}
-	domain_length--;	//ÉÏÃæ¶à¼ÓÁËÒ»¸ö.
+	domain_length--;	//ä¸Šé¢å¤šåŠ äº†ä¸€ä¸ª.
 
 	if (up >= self->offset)
 		self->offset += 1;
 
-	//PyUnicodeObject* s = (PyUnicodeObject*)PyObject_MALLOC(PyUnicodeObject_SIZE)
+	if (domain_length <= 1){
+		PyErr_SetString(PyExc_RuntimeError, "bad DNS response");
+		return NULL;
+	}
 
-	PyBytesObject *op = (PyBytesObject *)_PyBytes_FromSize(domain_length, 0);
+	PyBytesObject *op = (PyBytesObject *)PyBytes_FromSize(domain_length, 0);
 	if (op == NULL)
 		return NULL;
 	char* domain = op->ob_sval;
@@ -205,7 +208,7 @@ DNSParser_build_request(DNSParser* self, PyObject *args){
 	register PyBytesObject* b = NULL;
 	register size_t c = DNS_REQ_HEADER_LEN, e = 0, part_len = 0;
 	
-	unsigned short qtype;
+	register unsigned short qtype = 0;
 
 	if (!PyArg_ParseTuple(args, "SH", &dn, &qtype)){
 		return NULL;
@@ -217,7 +220,7 @@ DNSParser_build_request(DNSParser* self, PyObject *args){
 	register size_t s = 0, dnl = b->ob_base.ob_size;
 	register size_t size = DNS_REQ_SIZE(dnl);
 
-	PyBytesObject* req = (PyBytesObject*)_PyBytes_FromSize(size, 0);
+	PyBytesObject* req = (PyBytesObject*)PyBytes_FromSize(size, 0);
 	if (req == NULL)
 		return NULL;
 
@@ -296,15 +299,14 @@ DNSParser_parse_response(DNSParser* self){
 		PyErr_SetString(PyExc_RuntimeError, "offset is not 0");
 		return NULL;
 	}
-	register char* d = self->data->ob_sval;
-	self->offset += 6;		//È¥Í·
+	self->offset += 6;		//åŽ»å¤´
 
 	size_t answer_rrs = get_count_from_resp(self, 2);
 	size_t authority_rrs = get_count_from_resp(self, 2);
 	size_t addtional_rrs = get_count_from_resp(self, 2);
 
 	PyObject* query_domain = DNSParser_parse_domain(self);
-	self->offset += 4;		//ºöÂÔquery_type ºÍ  query_cls, ¹²4×Ö½Ú
+	self->offset += 4;		//å¿½ç•¥query_type å’Œ  query_cls, å…±4å­—èŠ‚
 
 	PyObject* rrs = PyList_New(0);
 	if (rrs == NULL)
