@@ -49,7 +49,7 @@ PyRC4(PyObject* mod, PyObject* op){
 	memcpy(dc, ((PyBytesObject*)tmp)->ob_sval, dlen);
 	
 	RC4(key, klen, dc, dlen);
-	Py_INCREF(d);
+	//Py_INCREF(d);		//不注释掉会内存泄露
 	return d;
 }
 
