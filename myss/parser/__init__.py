@@ -1,11 +1,12 @@
-try:
-    from .cares import RR, DNSParser
-except ImportError:
-    import os
-    import socket
-    import struct
-    from typing import List, Tuple
+import os
+import socket
+import struct
+from typing import List, Tuple
 
+try:
+    from .cares import RR
+except ImportError:
+    
     class RR:
         """resource record of DNS, see https://www.ietf.org/rfc/rfc1035.txt for detail"""
 
@@ -23,7 +24,10 @@ except ImportError:
             self.ttl = ttl
             self.value = value
 
-
+try:
+    from .cares import DNSParser
+except ImportError:
+    
     class DNSParser:
 
         _DOMAIN_END = 0
@@ -138,3 +142,64 @@ except ImportError:
                 rs.append(record)
             return rs
 
+try:
+    from .cares import parse_socks5_header
+except ImportError:
+
+    def parse_socks5_header(s: bytes) -> SocksHeader:
+        """Parse destination addr and port from socks5 header.
+
+        Normally, a SocksHeader instance(means succeed) or 
+        `None`(means need more data) will be returned. If parse 
+        failed, an exception will be raised"""
+        assert isinstance(s, bytes), "a bytes object is required"
+        dl = len(s)
+        if dl < 5:
+            return None
+
+        IPV4_LEN, IPV6_LEN = 7, 19
+
+        atyp = s[0]
+        if atyp == SocksHeader.ATYP_IPV4:
+            if dl < IPV4_LEN:
+                return None
+            addr = socket.inet_ntop(socket.AF_INET, s[1:5])
+            port = struct.unpack("!H", s[5:7])[0]
+            length = IPV4_LEN
+        elif atyp == SocksHeader.ATYP_IPV6:
+            if dl < IPV6_LEN:
+                return None
+            addr = socket.inet_ntop(socket.AF_INET6, s[1:17])
+            port = struct.unpack("!H", s[17:19])[0]
+            length = IPV6_LEN
+        elif atyp == SocksHeader.ATYP_HOST:
+            addrlen = s[1]
+            if dl < 2 + addrlen:
+                return None
+            addr = s[2:2 + addrlen]
+            port = struct.unpack('!H', s[2 + addrlen:4 + addrlen])[0]
+            length = 4 + addrlen
+        else:
+            raise ValueError("invalid qtyp")
+        res = SocksHeader(atyp, addr, port, length)
+        return res
+
+try:
+    from .cares import SocksHeader
+except ImportError:
+    
+    class SocksHeader:
+
+        ATYP_IPV4 = 0x01
+        ATYP_HOST = 0x03
+        ATYP_IPV6 = 0x04
+
+        __slots__ = ["atyp", "dest_addr", "dest_port", "header_length"]
+
+        def __init__(self, atyp: int, dest_addr: bytes, 
+            dest_port: int, header_length: int):
+
+            self.atyp = atyp
+            self.dest_addr = dest_addr
+            self.dest_port = dest_port
+            self.header_length = header_length

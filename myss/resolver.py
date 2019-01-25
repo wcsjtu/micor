@@ -34,7 +34,6 @@ class AsyncResolver(BaseHandler):
         s.setblocking(False)
         return s
 
-
     def _add_to_container(self, container: dict, hostname: str, obj: object):
         l = container.get(hostname, list())
         l.append(obj)
@@ -45,7 +44,6 @@ class AsyncResolver(BaseHandler):
             hostsfile = os.environ['WINDIR'] + '/system32/drivers/etc/hosts'
         else:
             hostsfile = "/etc/hosts"
-
         try:
             with open(hostsfile, "rb") as f:
                 for line in f.readlines():
