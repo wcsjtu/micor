@@ -16,13 +16,9 @@ extern PyTypeObject RRType;
 #define QCLASS_IN 1
 
 #define DNS_REQ_SIZE(domain_len) (DNS_REQ_HEADER_LEN + \
-	DNS_REQ_TAIL_LEN + domain_len + 1)	//nä¸ªç‚¹å¯¹åº”ç€n+1æ®µçš„é•¿åº¦, å†åŠ ä¸Š\x00ç»“æŸç¬¦
-
-#define PyBytesObject_SIZE (offsetof(PyBytesObject, ob_sval) + 1)
-#define GET_BYTE(b, i) ( (unsigned char)(*(b->ob_sval + i)) )	//ä»PyBytesObjectä¸­å–å‡ºbyte
+	DNS_REQ_TAIL_LEN + domain_len + 1)	//n¸öµã¶ÔÓ¦×Ån+1¶ÎµÄ³¤¶È, ÔÙ¼ÓÉÏ\x00½áÊø·û
 
 
-static PyBytesObject *nullstring;
 static char dns_req_header[] = { 'c', 'e', 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
 
 typedef struct{
@@ -30,57 +26,6 @@ typedef struct{
 	unsigned int len;
 } Inteval;
 
-
-size_t unpack(char* sd, size_t n){
-	unsigned char* d = (unsigned char*)sd;
-	if (n == 1){
-		return *d;
-	}
-	size_t r = 0;
-	for (size_t i = 0; i < n; i++){
-		r |= (*(d + i) << ((n - i - 1) * 8));
-	}
-	return r;
-}
-
-PyObject *
-PyBytes_FromSize(Py_ssize_t size, int use_calloc)
-{
-	PyBytesObject *op;
-	assert(size >= 0);
-
-	if (size == 0 && (op = nullstring) != NULL) {
-#ifdef COUNT_ALLOCS
-		null_strings++;
-#endif
-		Py_INCREF(op);
-		return (PyObject *)op;
-	}
-
-	if ((size_t)size > (size_t)PY_SSIZE_T_MAX - PyBytesObject_SIZE) {
-		PyErr_SetString(PyExc_OverflowError,
-			"byte string is too large");
-		return NULL;
-	}
-
-	/* Inline PyObject_NewVar */
-	if (use_calloc)
-		op = (PyBytesObject *)PyObject_Calloc(1, PyBytesObject_SIZE + size);
-	else
-		op = (PyBytesObject *)PyObject_Malloc(PyBytesObject_SIZE + size);
-	if (op == NULL)
-		return PyErr_NoMemory();
-	(void)PyObject_INIT_VAR(op, &PyBytes_Type, size);
-	op->ob_shash = -1;
-	if (!use_calloc)
-		op->ob_sval[size] = '\0';
-	/* empty byte string singleton */
-	if (size == 0) {
-		nullstring = op;
-		Py_INCREF(op);
-	}
-	return (PyObject *)op;
-}
 
 static PyObject* _class_attrs(){
 	PyObject* d = PyDict_New();
@@ -122,7 +67,7 @@ DNSParser_init(DNSParser* self, PyObject *args, PyObject *kwds){
 		return -1;
 	}
 	if (d){
-		tmp = (PyObject*)self->data;	//ä¸èƒ½å…ˆå‡refcount
+		tmp = (PyObject*)self->data;	//²»ÄÜÏÈ¼õrefcount
 		Py_INCREF(d);
 		self->data = (PyBytesObject*)d;
 		Py_XDECREF(tmp);
@@ -142,7 +87,7 @@ DNSParser_forward(DNSParser* self, PyObject* op){
 	Py_RETURN_NONE;
 }
 
-//ä»respä¸­è§£æå‡ºé•¿åº¦å€¼, å¹¶ç§»åŠ¨offset
+//´ÓrespÖĞ½âÎö³ö³¤¶ÈÖµ, ²¢ÒÆ¶¯offset
 size_t get_count_from_resp(DNSParser* self, size_t n){
 	register size_t res = unpack(self->data->ob_sval + self->offset, n);
 	self->offset += n;
@@ -153,7 +98,7 @@ static PyObject*
 DNSParser_parse_domain(DNSParser* self){
 	register char* data = self->data->ob_sval;
 	register unsigned int up = 0, i = self->offset, part_count = 0;
-	register unsigned int j = 0, copied = 0, domain_length = 0;	//åŸŸåé•¿åº¦
+	register unsigned int j = 0, copied = 0, domain_length = 0;	//ÓòÃû³¤¶È
 	Inteval parts[20] = {};
 
 	while (GET_BYTE(self->data, i) != DOMAIN_END){
@@ -167,15 +112,15 @@ DNSParser_parse_domain(DNSParser* self){
 		up = i + length + 1;
 
 		Inteval part = {i+1, length};
-		*(parts + part_count) = part; part_count++;	//	æ·»åŠ åˆ°é˜Ÿåˆ—
+		*(parts + part_count) = part; part_count++;	//	Ìí¼Óµ½¶ÓÁĞ
 
-		domain_length += (length + 1);	//. è¦å ä¸€ä½
+		domain_length += (length + 1);	//. ÒªÕ¼Ò»Î»
 
 		if (up >= self->offset)
 			self->offset += (length + 1);
 		i = up;
 	}
-	domain_length--;	//ä¸Šé¢å¤šåŠ äº†ä¸€ä¸ª.
+	domain_length--;	//ÉÏÃæ¶à¼ÓÁËÒ»¸ö.
 
 	if (up >= self->offset)
 		self->offset += 1;
@@ -208,7 +153,7 @@ DNSParser_build_request(DNSParser* self, PyObject *args){
 	register PyBytesObject* b = NULL;
 	register size_t c = DNS_REQ_HEADER_LEN, e = 0, part_len = 0;
 	
-	register unsigned short qtype = 0;
+	register short qtype = 0;
 
 	if (!PyArg_ParseTuple(args, "SH", &dn, &qtype)){
 		return NULL;
@@ -299,14 +244,14 @@ DNSParser_parse_response(DNSParser* self){
 		PyErr_SetString(PyExc_RuntimeError, "offset is not 0");
 		return NULL;
 	}
-	self->offset += 6;		//å»å¤´
+	self->offset += 6;		//È¥Í·
 
 	size_t answer_rrs = get_count_from_resp(self, 2);
 	size_t authority_rrs = get_count_from_resp(self, 2);
 	size_t addtional_rrs = get_count_from_resp(self, 2);
 
 	PyObject* query_domain = DNSParser_parse_domain(self);
-	self->offset += 4;		//å¿½ç•¥query_type å’Œ  query_cls, å…±4å­—èŠ‚
+	self->offset += 4;		//ºöÂÔquery_type ºÍ  query_cls, ¹²4×Ö½Ú
 
 	PyObject* rrs = PyList_New(0);
 	if (rrs == NULL)
@@ -379,7 +324,7 @@ static PyMethodDef DNSParser_methods[] = {
 };
 
 
-static PyTypeObject DNSParserType = {
+PyTypeObject DNSParserType = {
 	PyVarObject_HEAD_INIT(NULL, 0)	//PyObject_VAR_HEAD
 	"cares.DNSParser",			//tp_name,
 	sizeof(DNSParser),			//tp_basicsize
@@ -419,5 +364,3 @@ static PyTypeObject DNSParserType = {
 	0,								//tp_alloc
 	DNSParser_new					//tp_new
 };
-
-PyTypeObject* DNSParserTypePtr = &DNSParserType;

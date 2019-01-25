@@ -1,3 +1,8 @@
+#ifndef RC4_H
+#define RC4_H
+
+#include "mypydev.h"
+
 #define SBOX_LEN 256
 
 #define INIT_SBOX(s) unsigned char s[SBOX_LEN] = {\
@@ -31,5 +36,14 @@
 	}\
 }
 
-
 void RC4(unsigned char* key, int keylen, unsigned char* data, int datalen);
+PyObject* PyRC4(PyObject* mod, PyObject* op);
+
+
+PyDoc_STRVAR(PyRC4_doc,
+	"rc4(text: bytes, key: bytes) -> bytes\n\
+	\n\
+	RC4 en/decryptor");
+
+
+#endif

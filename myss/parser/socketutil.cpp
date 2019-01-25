@@ -1,5 +1,16 @@
 #include "socketutil.h"
 
+size_t unpack(char* sd, size_t n){
+	unsigned char* d = (unsigned char*)sd;
+	if (n == 1){
+		return *d;
+	}
+	size_t r = 0;
+	for (size_t i = 0; i < n; i++){
+		r |= (*(d + i) << ((n - i - 1) * 8));
+	}
+	return r;
+}
 
 #ifdef WIN32
 PyObject *
