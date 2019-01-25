@@ -57,7 +57,7 @@ class IOLoop:
 
     TIMEOUT = 10
 
-    DEFAULT_HANDLER = (None, None)
+    DEFAULT_HANDLER = (None, 0, None)
 
     _instance = None
 
@@ -90,8 +90,16 @@ class IOLoop:
 
     def register(self, sock, mode, handler):
         fd = sock.fileno()
-        self._fds[fd] = (sock, handler)
-        self._impl.register(fd, mode)
+        if fd in self._fds:
+            if self._fds[fd][1] != mode:
+                self._impl.modify(fd, mode | self.ERROR)
+            item = list(self._fds[fd])
+            item[2] = handler
+            self._fds[fd] = tuple(item)
+        else:
+            self._fds[fd] = (sock, mode, handler)
+            self._impl.register(fd, mode)
+        
 
     def unregister(self, sock):
         fd = sock.fileno()
@@ -100,10 +108,6 @@ class IOLoop:
             self._impl.unregister(fd)
         except Exception as err:
             pass
-
-    def mod_callback(self, sock, handler):
-        fd = sock.fileno()
-        self._fds[fd] = (sock, handler)
 
     def mod_register(self, sock, events):
         fd = sock.fileno()
@@ -146,7 +150,7 @@ class IOLoop:
                timeout = max(0, delta)
             events = self._impl.poll(timeout=timeout)
             for fd, event in events:
-                sock, handler = self._fds.get(fd, self.DEFAULT_HANDLER)
+                sock, mode, handler = self._fds.get(fd, self.DEFAULT_HANDLER)
                 if not sock:
                     continue
                 handler(sock, fd, event)

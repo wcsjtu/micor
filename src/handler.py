@@ -174,6 +174,16 @@ class Connection(BaseHandler):
             self.on_write(future)
 
     @coroutine
+    def read_forever(self):
+        f = Future()
+        cb = partial(self.handle_events, future=f)
+        self._loop.register(self._sock, self.events, cb)
+        chunk = yield f
+        if not chunk:
+            raise errors.ConnectionClosed()
+        return chunk
+
+    @coroutine
     def read_until(self, regex: str, maxrange: int=None):
         maxrange = maxrange or 65535
         patt = re.compile(tobytes(regex))
@@ -182,7 +192,6 @@ class Connection(BaseHandler):
             cb = partial(self.handle_events, future=f)
             self._loop.register(self._sock, self.events, cb)
             chunk = yield f
-            self._loop.unregister(self._sock)
             if chunk:
                 self._rbuf.append(chunk)
                 self._rbsize += len(chunk)
@@ -210,7 +219,6 @@ class Connection(BaseHandler):
             cb = partial(self.handle_events, future=f)
             self._loop.register(self._sock, self.events, cb)
             num = yield f
-            self._loop.unregister(self._sock)
 
 
 class Datagram(BaseHandler):
