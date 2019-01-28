@@ -64,7 +64,7 @@ static PyMemberDef members[] = {
 	{ "atyp", T_USHORT, offsetof(SocksHeader, atyp), READONLY, atyp_doc },
 	{ "dest_addr", T_OBJECT_EX, offsetof(SocksHeader, dest_addr), 0, addr_doc },
 	{ "dest_port", T_USHORT, offsetof(SocksHeader, dest_port), READONLY, port_doc },
-	{ "header_length", T_UINT, offsetof(SocksHeader, header_length), READONLY, header_length_doc },
+	{ "header_length", T_INT, offsetof(SocksHeader, header_length), READONLY, header_length_doc },
 	{ NULL }
 };
 
@@ -121,15 +121,18 @@ parse_socks5_header(PyObject* self, PyObject* op){
 		Py_RETURN_NONE;	//need more data
 	}
 	unsigned short int atyp = (unsigned short int)data[0];
-	unsigned int length = 0;
-	PyObject* addr = NULL;
+	int length = 0;
+	PyObject* addr = Py_None;
+	
 	unsigned short int port = 0;
 	unsigned char addrlen = 0;
 
 	switch (atyp){
 	case ATYP_IPV4:
-		if (size < SOCK_HEADER_IPV4_LEN)
-			Py_RETURN_NONE;
+		if (size < SOCK_HEADER_IPV4_LEN){
+			length = size - SOCK_HEADER_IPV4_LEN;
+			break;
+		}
 		addr = socket_inet_ntop(AF_INET, data+1, 4);
 		if (addr == NULL)
 			return NULL;
@@ -137,8 +140,10 @@ parse_socks5_header(PyObject* self, PyObject* op){
 		length = SOCK_HEADER_IPV4_LEN;
 		break;
 	case ATYP_IPV6:
-		if (size < SOCK_HEADER_IPV6_LEN)
-			Py_RETURN_NONE;
+		if (size < SOCK_HEADER_IPV6_LEN){
+			length = size - SOCK_HEADER_IPV6_LEN;
+			break;
+		}
 		addr = socket_inet_ntop(AF_INET6, data + 1, 16);
 		if (addr == NULL)
 			return NULL;
@@ -147,8 +152,10 @@ parse_socks5_header(PyObject* self, PyObject* op){
 		break;
 	case ATYP_HOST:
 		addrlen = (unsigned char)data[1];
-		if (size < (2 + addrlen))
-			Py_RETURN_NONE;
+		if (size < ((unsigned int)2 + addrlen)){
+			length = size - (2 + addrlen);
+			break;
+		}
 		addr = PyBytes_FromStringAndSize(data+2, addrlen);
 		if (addr == NULL)
 			return NULL;

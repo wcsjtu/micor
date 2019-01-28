@@ -9,7 +9,7 @@ typedef struct _SocksHeader {
 	unsigned short int atyp;
 	PyBytesObject* dest_addr;
 	unsigned short int dest_port;
-	unsigned int header_length;
+	int header_length;
 } SocksHeader;
 
 PyObject* 
@@ -48,7 +48,9 @@ PyDoc_STRVAR(parse_socks5_header_doc,
 	"parse_socks5_header(s: bytes) -> SocksHeader Object\n\
 	\n\
 	Parse destination addr and port from socks5 header. normally,\n\
-	a SocksHeader instance(means succeed) or `None`(means need more data)\n\
-	will be returned. If parse failed, an exception will be raised");
+	a SocksHeader instance with positive `header_length` returned, \n\
+	means parse succeed; otherwise, an instance with nagetive or zero \n\
+	`header_length` returned means need more data, which size === \n\
+	abs(header_length). If parse failed, an exception will be raised");
 
 #endif

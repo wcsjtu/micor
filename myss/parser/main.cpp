@@ -31,5 +31,6 @@ PyInit_cares(void){
 	Py_INCREF(&SocksHeaderType);
 	PyModule_AddObject(m, "RR", (PyObject*)&RRType);
 	PyModule_AddObject(m, "DNSParser", (PyObject*)&DNSParserType);
+	PyModule_AddObject(m, "SocksHeader", (PyObject*)&SocksHeaderType);
 	return m;
 }
