@@ -78,8 +78,16 @@ class IOLoop:
         fn = partial(callback, *args, **kwargs)
         self._ready.append(fn)
 
+    def add_calllater(self, delay: int, cb):
+        timer = Timer(time.time() + delay, cb)
+        self._timers.append(timer)
+        return timer
+
     def add_timer(self, timer):
         self._timers.append(timer)
+
+    def remove_timer(self, timer):
+        self._timers.remove(timer)
 
     def add_future(self, future, callback):
 
@@ -95,11 +103,12 @@ class IOLoop:
                 self._impl.modify(fd, mode | self.ERROR)
             item = list(self._fds[fd])
             item[2] = handler
+            item[1] = mode
             self._fds[fd] = tuple(item)
         else:
             self._fds[fd] = (sock, mode, handler)
             self._impl.register(fd, mode)
-        
+        return
 
     def unregister(self, sock):
         fd = sock.fileno()

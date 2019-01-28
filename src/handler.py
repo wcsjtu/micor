@@ -6,7 +6,7 @@ from functools import partial
 from .gen import Future, coroutine
 from .utils import errno_from_exception, \
     merge_prefix, tobytes
-from .ioloop import IOLoop
+from .ioloop import IOLoop, Timer
 from .import errors
 
 class BaseHandler:
@@ -183,12 +183,55 @@ class Connection(BaseHandler):
             raise errors.ConnectionClosed()
         return chunk
 
+    def _read_nbytes_from_buf(self, n: int) -> bytes:
+        assert self._rbsize >= n
+        merge_prefix(self._rbuf, n)
+        s = self._rbuf.popleft()
+        self._rbsize -= n
+        return s
+
+    @coroutine
+    def read_nbytes(self, n:int, timeout: int=0) -> bytes:
+
+        f = Future()
+
+        if n <= self._rbsize:
+            self._loop.add_callsoon(lambda v: v.set_result(None), f)
+            yield f
+            return self._read_nbytes_from_buf(n)
+        
+        def on_timeout():
+            self.close()
+            f.cancel((errors.TimeoutError, None, None))
+
+        timer = None
+        if timeout:
+            timer = self._loop.add_calllater(timeout, on_timeout)
+
+        cb = partial(self.handle_events, future=f)
+        while True:
+            self._loop.register(self._sock, self.events, cb)
+            chunk = yield f
+            if chunk:
+                self._rbuf.append(chunk)
+                self._rbsize += len(chunk)
+                if self._rbsize >= n:
+                    if timer:
+                        self._loop.remove_timer(timer)
+                    return self._read_nbytes_from_buf(n)
+            else:
+                self.close()
+                if timer:
+                    self._loop.remove_timer(timer)
+                raise errors.ConnectionClosed()
+            f.clear()
+
     @coroutine
     def read_until(self, regex: str, maxrange: int=None):
         maxrange = maxrange or 65535
         patt = re.compile(tobytes(regex))
+        f = Future(reuse=True)
         while True:
-            f = Future()
             cb = partial(self.handle_events, future=f)
             self._loop.register(self._sock, self.events, cb)
             chunk = yield f
@@ -214,8 +257,8 @@ class Connection(BaseHandler):
     def write(self, data):
         self._wbuf.append(data)
         self._wbsize += len(data)
+        f = Future(reuse=True)
         while self._wbsize:
-            f = Future()
             cb = partial(self.handle_events, future=f)
             self._loop.register(self._sock, self.events, cb)
             num = yield f
@@ -263,12 +306,7 @@ class TCPServer(_ServerHandler):
             # print("accept %s:%d" % addr)
             h = Connection(conn, addr, self._loop)
             future = self.handle_conn(h, addr)
-
-            def cb(f):
-                return f.set_result(None) if f else None
-
-            if future is not None:
-                self._loop.add_future(future, cb)
+            self._loop.add_future(future, lambda f: f.print_excinfo())
 
         except (OSError, IOError) as exc:
             print("accept error: ", exc)
