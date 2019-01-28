@@ -116,17 +116,23 @@ parse_socks5_header(PyObject* self, PyObject* op){
 		return NULL;
 	}
 	unsigned int size = ((PyBytesObject*)op)->ob_base.ob_size;
+	int length = 0;
+	unsigned short int atyp = 0, port = 0;
+	unsigned char addrlen = 0;
+	PyObject* addr = Py_None;
+
+	SocksHeader* sh = (SocksHeader*)SocksHeader_New(&SocksHeaderType, NULL, NULL);
+	if (sh == NULL){
+		return NULL;
+	}
+
 	char* data = (((PyBytesObject*)op)->ob_sval);
 	if (size < SOCK_HEADER_HOST_MIN_LEN){
-		Py_RETURN_NONE;	//need more data
+		length = size - SOCK_HEADER_HOST_MIN_LEN;
+		goto ret;	//need more data
 	}
-	unsigned short int atyp = (unsigned short int)data[0];
-	int length = 0;
-	PyObject* addr = Py_None;
-	
-	unsigned short int port = 0;
-	unsigned char addrlen = 0;
 
+	atyp = (unsigned short int)data[0];
 	switch (atyp){
 	case ATYP_IPV4:
 		if (size < SOCK_HEADER_IPV4_LEN){
@@ -166,11 +172,9 @@ parse_socks5_header(PyObject* self, PyObject* op){
 		PyErr_SetString(PyExc_ValueError, "invalid qtyp");
 		return NULL;
 	}
-	SocksHeader* sh = (SocksHeader*)SocksHeader_New(&SocksHeaderType, NULL, NULL);
-	if (sh == NULL){
-		Py_XDECREF(addr);
-		return NULL;
-	}
+	
+	
+ret:
 	sh->atyp = atyp;
 	sh->dest_addr = (PyBytesObject*)addr;
 	sh->dest_port = port;
