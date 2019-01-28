@@ -61,10 +61,10 @@ static PyObject* _ClassAttrs(){
 }
 
 static PyMemberDef members[] = {
-	{ "atyp", T_USHORT, offsetof(SocksHeader, atyp), READONLY, atyp_doc },
+	{ "atyp", T_USHORT, offsetof(SocksHeader, atyp), 0, atyp_doc },
 	{ "dest_addr", T_OBJECT_EX, offsetof(SocksHeader, dest_addr), 0, addr_doc },
-	{ "dest_port", T_USHORT, offsetof(SocksHeader, dest_port), READONLY, port_doc },
-	{ "header_length", T_INT, offsetof(SocksHeader, header_length), READONLY, header_length_doc },
+	{ "dest_port", T_USHORT, offsetof(SocksHeader, dest_port), 0, port_doc },
+	{ "header_length", T_INT, offsetof(SocksHeader, header_length), 0, header_length_doc },
 	{ NULL }
 };
 
