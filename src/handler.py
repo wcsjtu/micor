@@ -285,9 +285,12 @@ class Datagram(BaseHandler):
 
 class TCPServer(_ServerHandler):
 
-    def __init__(self, ip, port, backlog=128, loop=None, **sockopt):
+    def __init__(self, ip, port, 
+            backlog=128, loop=None, 
+            conn_cls=Connection, **sockopt):
         super().__init__(ip, port, backlog, loop, **sockopt)
         self._sock.listen(self.backlog)
+        self.conn_class = conn_cls
 
     def getaddrinfo(self):
         addrs = socket.getaddrinfo(
@@ -304,7 +307,7 @@ class TCPServer(_ServerHandler):
         try:
             conn, addr = self._sock.accept()
             # print("accept %s:%d" % addr)
-            h = Connection(conn, addr, self._loop)
+            h = self.conn_class(conn, addr, self._loop)
             future = self.handle_conn(h, addr)
             self._loop.add_future(future, lambda f: f.print_excinfo())
 

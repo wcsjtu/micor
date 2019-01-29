@@ -15,15 +15,16 @@ class Future(object):
     __slots__ = ["_callback", "_exc_info", "_result", "_status", "_reuse"]
 
     def __init__(self, reuse:bool=False):
-        self._callback = None
+        self._callback = self.print_excinfo
         self._exc_info = None
         self._result = None
         self._status = self._PENDING
         self._reuse = reuse
 
-    def print_excinfo(self):
-        if self._exc_info:
-            tp, val, tb = self._exc_info
+    def print_excinfo(self, fut=None):
+        fut = fut if fut else self
+        if fut._exc_info:
+            tp, val, tb = fut._exc_info
             traceback.print_exception(tp, val, tb, chain=False)
 
     def cancel(self, excinfo=None):
