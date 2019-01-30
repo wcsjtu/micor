@@ -262,6 +262,7 @@ class Connection(BaseHandler):
             cb = partial(self.handle_events, future=f)
             self._loop.register(self._sock, self.events, cb)
             num = yield f
+        self._loop.unregister(self._sock)
 
 
 class Datagram(BaseHandler):
