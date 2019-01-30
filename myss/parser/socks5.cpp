@@ -159,7 +159,7 @@ parse_socks5_header(PyObject* self, PyObject* op){
 	case ATYP_HOST:
 		addrlen = (unsigned char)data[1];
 		if (size < ((unsigned int)2 + addrlen)){
-			length = size - (2 + addrlen);
+			length = size - (4 + addrlen);	//\x03\n\www.jd.com\x00P
 			break;
 		}
 		addr = PyBytes_FromStringAndSize(data+2, addrlen);
