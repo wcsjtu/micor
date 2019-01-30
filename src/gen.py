@@ -61,12 +61,11 @@ class Future(object):
                 del self
                 return
             
-        if self._callback:
-            cb = self._callback
-            try:
-                cb(self)
-            except Exception:
-                print('Exception in callback %r for %r' % (cb, self))
+        cb = self._callback
+        try:
+            cb(self)
+        except Exception:
+            print('Exception in callback %r for %r' % (cb, self))
 
         self._status = self._FINISHED
         if not self._reuse:
