@@ -3,6 +3,7 @@ import os, socket, sys, struct, logging
 from src import BaseHandler, IOLoop, Future, coroutine
 from src.utils import ip_type
 from .parser import DNSParser, RR
+from .logger import logger
 
 
 class AsyncResolver(BaseHandler):
@@ -82,7 +83,10 @@ class AsyncResolver(BaseHandler):
         if not self._dnsservers:
             self._dnsservers = ['8.8.4.4', '8.8.8.8']
 
-    def reslove_from_cache(self, host, qtype):
+    def resolve_from_cache(self, host, qtype):
+        if ip_type(host):
+            return [host]
+
         ips = list()
         if qtype & DNSParser.QTYPE_A:
             ips = self._hosts_v4.get(host)
@@ -100,11 +104,13 @@ class AsyncResolver(BaseHandler):
             self._sock.sendto(req, (server, 53))
 
     @coroutine
-    def getaddrinfo(self, host, port, family=socket.AF_INET, type=0, proto=0, flags=0):
+    def getaddrinfo(self, host: str, port, family=socket.AF_INET, type=0, proto=0, flags=0):
         future = Future()
         qtype = self._FAMILY2QTYPE[family]
-        ips = self.reslove_from_cache(host, qtype)
+        host = host.encode("utf-8")
+        ips = self.resolve_from_cache(host, qtype)
         if ips:
+            logger.debug("hit cache: %s" % host.decode("utf8"))
             self._loop.add_callsoon(lambda f: f.set_result(None), future)
             yield future
         else:
@@ -124,7 +130,7 @@ class AsyncResolver(BaseHandler):
         try:
             hostname, rrs = DNSParser(data).parse_response()
         except Exception as e:
-            logging.warn("parse dns response error: %s" % str(e), exc_info=True)
+            logging.warn("DNS: parse dns response error: %s" % str(e), exc_info=True)
             return
         ipv4s, ipv6s = list(), list()
         for rr in rrs:
@@ -142,7 +148,7 @@ class AsyncResolver(BaseHandler):
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
             self.close()
-            logging.warn("dns sock error")
+            logging.warn("DNS: dns sock error")
             return
         if events & self._loop.READ:
             try:
@@ -153,3 +159,6 @@ class AsyncResolver(BaseHandler):
             
     def close(self):
         pass
+
+
+resolver = AsyncResolver()

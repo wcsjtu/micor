@@ -49,8 +49,12 @@ def merge_prefix(deque, size):
 def tobytes(s):
     return s.encode("utf8") if type(s) is str else s
 
+def tostr(b):
+    return b.decode("utf8") if type(b) is bytes else b
+
 
 def ip_type(ip: str) -> int:
+    ip = tostr(ip)
     for family in (socket.AF_INET, socket.AF_INET6):
         try:
             socket.inet_pton(family, ip)

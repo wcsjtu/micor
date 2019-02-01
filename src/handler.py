@@ -1,13 +1,15 @@
 ﻿import socket
 import errno
 import re
+import logging
 from collections import deque
 from functools import partial
 from .gen import Future, coroutine
 from .utils import errno_from_exception, \
     merge_prefix, tobytes
 from .ioloop import IOLoop, Timer
-from .import errors
+from .import errors,utils
+
 
 class BaseHandler:
 
@@ -68,10 +70,30 @@ class _ServerHandler(BaseHandler):
         return sock
 
 
+class Datagram(BaseHandler):
+
+    def __init__(self, sock, addr, data, loop):
+        super().__init__(loop)
+        self._sock = sock
+        self._addr = addr
+        self._rbuf = [data]
+
+    def read_package(self):
+        return self._rbuf[0]
+
+    def write_package(self, pkg):
+        self._sock.sendto(pkg, self._addr)
+
+    def close(self):
+        self._rbuf = []
+        self._addr = tuple()
+
+
 class UDPServer(_ServerHandler):
 
-    def __init__(self, ip, port, backlog=128, loop=None, **sockopt):
-        super().__init__(ip, port, backlog, loop, **sockopt)
+    def __init__(self, ip, port, conn_cls=Datagram,  loop=None, **sockopt):
+        super().__init__(ip, port, None, loop, **sockopt)
+        self.conn_cls = conn_cls
 
     def getaddrinfo(self):
         addrs = socket.getaddrinfo(
@@ -87,18 +109,13 @@ class UDPServer(_ServerHandler):
             raise Exception('server_socket error')
         try:
             data, addr = self._sock.recvfrom(65535)
-            print("accept %s:%d" % addr)
-            h = Datagram(sock, addr, data, self._loop)
+            logging.debug("UDP: accept %s:%d" % addr)
+            h = self.conn_cls(sock, addr, data, self._loop)
             future = self.handle_datagram(h, addr)
 
-            def cb(f):
-                return f.result() if f else None
-
-            if future is not None:
-                self._loop.add_future(future, cb)
-
+            self._loop.add_future(future, lambda f: f.print_excinfo())
         except (OSError, IOError) as exc:
-            print("accept error: ", exc)
+            logging.warn("UDP: accept error: ", exc)
 
     @coroutine
     def handle_datagram(self, datagram, addr):
@@ -159,13 +176,13 @@ class Connection(BaseHandler):
                     break
                 else:
                     self.close()
-                    print("Write error on %d: %s" % (self._sock.fileno(), exc))
-                    return
+                    logging.warn("TCP: Write error on %d: %s" % (self._sock.fileno(), exc))
+                    break
         future.set_result(bytes_num)
 
     def handle_events(self, sock, fd, events, future):
         if events & self._loop.ERROR:
-            print("socket %s:%d error" % self._addr)
+            logging.warn("TCP: socket %s:%d error" % self._addr)
             self.close()
             return
         if events & self._loop.READ:
@@ -174,13 +191,20 @@ class Connection(BaseHandler):
             self.on_write(future)
 
     @coroutine
-    def read_forever(self):
+    def read_forever(self, timeout: int=0):
         f = Future()
         cb = partial(self.handle_events, future=f)
         self._loop.register(self._sock, self.events, cb)
+        timer = None
+        if timeout:
+            timer = self._loop.add_calllater(
+                timeout, 
+                lambda f: f.cancel(errors.TimeoutError, None, None))
         chunk = yield f
+        if timer:
+            self._loop.remove_timer(timer)
         if not chunk:
-            raise errors.ConnectionClosed()
+            raise errors.ConnectionClosed(self._addr)
         return chunk
 
     def _read_nbytes_from_buf(self, n: int) -> bytes:
@@ -223,7 +247,7 @@ class Connection(BaseHandler):
                 self.close()
                 if timer:
                     self._loop.remove_timer(timer)
-                raise errors.ConnectionClosed()
+                raise errors.ConnectionClosed(self._addr)
             f.clear()
 
     @coroutine
@@ -248,40 +272,25 @@ class Connection(BaseHandler):
                     return data
                 else:
                     if len(self._rbuf[0]) >= maxrange:
-                        raise errors.ConnectionClosed("Entity Too Large")
+                        raise errors.ConnectionClosed(
+                            ("[::]", 0), "Entity Too Large")
             else:
                 self.close()
-                raise errors.ConnectionClosed()
+                raise errors.ConnectionClosed(self._addr)
 
     @coroutine
     def write(self, data):
         self._wbuf.append(data)
         self._wbsize += len(data)
-        f = Future(reuse=True)
+        f = Future(True)
+        n = 0
         while self._wbsize:
             cb = partial(self.handle_events, future=f)
             self._loop.register(self._sock, self.events, cb)
             num = yield f
+            n += num
         self._loop.unregister(self._sock)
-
-
-class Datagram(BaseHandler):
-
-    def __init__(self, sock, addr, data, loop):
-        super().__init__(loop)
-        self._sock = sock
-        self._addr = addr
-        self._rbuf = [data]
-
-    def read_package(self):
-        return self._rbuf[0]
-
-    def write_package(self, pkg):
-        self._sock.sendto(pkg, self._addr)
-
-    def close(self):
-        self._rbuf = []
-        self._addr = tuple()
+        return n
 
 
 class TCPServer(_ServerHandler):
@@ -307,13 +316,13 @@ class TCPServer(_ServerHandler):
             raise Exception('server_socket error')
         try:
             conn, addr = self._sock.accept()
-            # print("accept %s:%d" % addr)
-            h = self.conn_class(conn, addr, self._loop)
+            logging.debug("TCP: accept %s:%d" % addr)
+            h = self.conn_class(conn, addr, loop = self._loop)
             future = self.handle_conn(h, addr)
             self._loop.add_future(future, lambda f: f.print_excinfo())
 
         except (OSError, IOError) as exc:
-            print("accept error: ", exc)
+            logging.warn("TCP: accept error: ", exc)
 
     @coroutine
     def handle_conn(self, conn, addr):
@@ -322,19 +331,23 @@ class TCPServer(_ServerHandler):
 
 class TCPClient(Connection):
 
-    def __init__(self, addr, **sockopt):
+    def __init__(self, **sockopt):
         loop = IOLoop.current()
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.setblocking(False)
         self._connected = False
-        super().__init__(self._sock, addr, loop)
+        super().__init__(None, None, loop)
 
     def on_connected(self, future: Future):
-        future.set_result(None)
         self._connected = True
+        future.set_result(None)
 
     @coroutine
-    def connect(self):
+    def connect(self, addr):
+        family = utils.ip_type(addr[0])
+        if not family:
+            raise ValueError("hostname not support!")
+        self._sock = socket.socket(family, socket.SOCK_STREAM)
+        self._sock.setblocking(False)
+        self._addr = (utils.tostr(addr[0]), addr[1])
         future = Future()
         try:
             self._sock.connect(self._addr)
@@ -347,7 +360,7 @@ class TCPClient(Connection):
 
     def handle_events(self, sock, fd, events, future):
         if events & self._loop.ERROR:
-            print("socket %s:%d error" % self._addr)
+            logging.warn("TCP: socket %s:%d error" % self._addr)
             self.close()
             return
         if events & self._loop.WRITE:
@@ -357,3 +370,39 @@ class TCPClient(Connection):
                 self.on_write(future)
         if events & self._loop.READ:
             self.on_read(future)
+
+
+class UDPClient(BaseHandler):
+    
+    def __init__(self, sock, addr, loop=None):
+        if not loop:
+            loop = IOLoop.current()
+        super().__init__(loop)
+        self._sock = sock
+        self._addr = addr
+        self._future = None
+        self._loop.register(self._sock, self._loop.READ, self.handle)
+
+    def handle(self, sock, fd, events):
+        if events & self._loop.READ:
+            data, server = self._sock.recvfrom(65535)
+            self.on_read(data, server)
+        if events & self._loop.ERROR:
+            self.close()
+            logging.warn("UDP: socket %s:%d error" % self._addr)
+            self._future.cancel()
+
+    def on_read(self, data, svr):
+        self._future.set_result((data, svr))
+
+    def write(self, req, server):
+        self._sock.sendto(req, server)
+
+    def read(self, timeout: int=0):
+        self._future = Future()
+        def on_timeout():
+            self.close()
+            self._future.cancel((errors.TimeoutError, None, None))
+        if timeout:
+            self._loop.add_calllater(timeout, on_timeout)
+        return self._future

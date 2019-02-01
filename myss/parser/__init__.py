@@ -3,6 +3,8 @@ import socket
 import struct
 from typing import List, Tuple
 
+from .cares import rc4
+
 try:
     from .cares import RR
 except ImportError:
