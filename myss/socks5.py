@@ -27,7 +27,7 @@ def ack(addr: str, port: int) -> bytes:
 
 
 ATYP_TO_FAMILY = {
-    SocksHeader.ATYP_HOST: socket.AF_INET | socket.AF_INET6,
+    SocksHeader.ATYP_HOST: 0,
     SocksHeader.ATYP_IPV4: socket.AF_INET,
     SocksHeader.ATYP_IPV6: socket.AF_INET6
 }

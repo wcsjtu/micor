@@ -4,14 +4,14 @@ from src import BaseHandler, IOLoop, Future, coroutine
 from src.utils import ip_type
 from .parser import DNSParser, RR
 from .logger import logger
-
+from src import errors
 
 class AsyncResolver(BaseHandler):
 
     _FAMILY2QTYPE = {
         socket.AF_INET: DNSParser.QTYPE_A,
         socket.AF_INET6: DNSParser.QTYPE_AAAA,
-        0: DNSParser.QTYPE_A | DNSParser.QTYPE_AAAA
+        0: DNSParser.QTYPE_A 
     }
 
     def __init__(self, loop=None):
@@ -104,16 +104,28 @@ class AsyncResolver(BaseHandler):
             self._sock.sendto(req, (server, 53))
 
     @coroutine
-    def getaddrinfo(self, host: str, port, family=socket.AF_INET, type=0, proto=0, flags=0):
+    def getaddrinfo(self, 
+                    host: str, 
+                    port: int, 
+                    family: int=socket.AF_INET, 
+                    type: int=0, 
+                    proto: int=0, 
+                    flags: int=0,
+                    timeout: int=0):
         future = Future()
         qtype = self._FAMILY2QTYPE[family]
         host = host.encode("utf-8")
         ips = self.resolve_from_cache(host, qtype)
+        timer = None
         if ips:
-            logger.debug("hit cache: %s" % host.decode("utf8"))
+            logger.debug("DNS: hit cache: %s" % host.decode("utf8"))
             self._loop.add_callsoon(lambda f: f.set_result(None), future)
             yield future
         else:
+            if timeout:
+                timer = self._loop.add_calllater(
+                    timeout, 
+                    lambda: future.cancel(errors.TimeoutError, None, None))
             if qtype & DNSParser.QTYPE_A:
                 self._send_req(host, DNSParser.QTYPE_A)
                 self._add_to_container(self._futures_v4, host, future)
@@ -121,6 +133,8 @@ class AsyncResolver(BaseHandler):
                 self._send_req(host, DNSParser.QTYPE_AAAA)
                 self._add_to_container(self._futures_v6, host, future)
             ips = yield future
+        if timer:
+            self._loop.remove_timer(timer)
         if not ips:
             raise socket.gaierror("getaddrinfo failed: %s" % host)
         res = [(family, type, proto, "", (ip, port)) for ip in ips]
@@ -138,6 +152,8 @@ class AsyncResolver(BaseHandler):
                 ipv4s.append(rr.value)
             elif rr.qtype == DNSParser.QTYPE_AAAA and rr.qcls == DNSParser.QCLASS_IN:
                 ipv6s.append(rr.value)
+        self._resolved_v4[hostname] = ipv4s
+        self._resolved_v6[hostname] = ipv6s
         v4_futures = self._futures_v4.pop(hostname, [])
         v6_futures = self._futures_v6.pop(hostname, [])
         for future in v4_futures:

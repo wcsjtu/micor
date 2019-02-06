@@ -16,6 +16,8 @@ class BaseHandler:
     def __init__(self, loop: IOLoop):
         self._sock = None
         self._loop = loop
+        self._rfut = None
+        self._wfut = None
 
     def handle(self, sock, fd, events):
         raise NotImplementedError(
@@ -27,6 +29,8 @@ class BaseHandler:
         self._sock.close()
         
     def register(self, events=None, cb=None):
+        if self._sock._closed:
+            return
         if events is None:
             events = self._loop.READ | self._loop.ERROR
         else:
@@ -133,8 +137,12 @@ class Connection(BaseHandler):
         self._rbuf = deque()
         self._rbsize = 0
         self._closed = False
+        if self._sock:
+            self.register(self.events)
 
     def close(self):
+        if self._closed:
+            return
         super().close()
         self._closed = True
         self._wbuf, self._rbuf = deque(), deque()
@@ -146,18 +154,24 @@ class Connection(BaseHandler):
             e |= self._loop.WRITE
         return e
 
-    def on_read(self, future):
+    def on_read(self):
+        data = b''
         try:
             data = self._sock.recv(65535)
-            future.set_result(data)
         except (OSError, IOError) as exc:
             if errno_from_exception(exc) in (
                 errno.ETIMEDOUT, errno.EAGAIN, errno.EWOULDBLOCK):
                 return
-            else:
-                future.set_result(b'')
+        if self._rfut:
+            self._rfut.set_result(data)
+            self._rfut = None
+        else:
+            if not data:
+                self.close()
+            self._rbuf.append(data)
+            self._rbsize += len(data)
 
-    def on_write(self, future):
+    def on_write(self):
         bytes_num = 0
         merge_prefix(self._wbuf, 65535)
         while self._wbsize:
@@ -178,78 +192,95 @@ class Connection(BaseHandler):
                     self.close()
                     logging.warn("TCP: Write error on %d: %s" % (self._sock.fileno(), exc))
                     break
-        future.set_result(bytes_num)
+        if self._wfut and not self._wbsize:
+            self._wfut.set_result(bytes_num)
+            #self._wfut = None
 
-    def handle_events(self, sock, fd, events, future):
+    def on_error(self):
+        logging.warn("TCP: socket %s:%d error" % self._addr)
+        if self._wfut:
+            self._wfut.cancel((socket.error, None, None))
+        if self._rfut:
+            self._rfut.cancel((socket.error, None, None))
+        self.close()
+
+    def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
-            logging.warn("TCP: socket %s:%d error" % self._addr)
-            self.close()
+            self.on_error()
             return
         if events & self._loop.READ:
-            self.on_read(future)
+            self.on_read()
         if events & self._loop.WRITE:
-            self.on_write(future)
+            self.on_write()
+        if not self._closed:
+            self.register(self.events)
+
+    def _pop_from_rbuf(self, size):
+        merge_prefix(self._rbuf, size)
+        res = self._rbuf.popleft()
+        self._rbsize -= len(res)
+        return res
 
     @coroutine
     def read_forever(self, timeout: int=0):
-        f = Future()
-        cb = partial(self.handle_events, future=f)
-        self._loop.register(self._sock, self.events, cb)
+        if self._rbsize > 0:
+            chunk = yield self.read_from_buf(self._rbsize)
+            return chunk
+        future = self.read_from_fd()
         timer = None
         if timeout:
-            timer = self._loop.add_calllater(
-                timeout, 
-                lambda f: f.cancel(errors.TimeoutError, None, None))
-        chunk = yield f
+            timer = self._loop.add_calllater(timeout,
+                    lambda: future.cancel((errors.TimeoutError, None, None))
+                )
+        chunk = yield future
         if timer:
             self._loop.remove_timer(timer)
         if not chunk:
+            self.close()
             raise errors.ConnectionClosed(self._addr)
         return chunk
 
-    def _read_nbytes_from_buf(self, n: int) -> bytes:
-        assert self._rbsize >= n
-        merge_prefix(self._rbuf, n)
-        s = self._rbuf.popleft()
-        self._rbsize -= n
-        return s
+    def read_from_fd(self):
+        future = Future()
+        self._rfut = future
+        return future
 
+    def read_from_buf(self, n):
+        assert self._rbsize >= n
+        future = Future()
+        res = self._pop_from_rbuf(n)
+        self._loop.add_callsoon(lambda v: v.set_result(res), future)
+        return future
+    
     @coroutine
     def read_nbytes(self, n:int, timeout: int=0) -> bytes:
-
-        f = Future()
-
         if n <= self._rbsize:
-            self._loop.add_callsoon(lambda v: v.set_result(None), f)
-            yield f
-            return self._read_nbytes_from_buf(n)
-        
+            res = yield self.read_from_buf(n)
+            return res
+
         def on_timeout():
             self.close()
-            f.cancel((errors.TimeoutError, None, None))
+            self._rfut.cancel((errors.TimeoutError, None, None))
 
         timer = None
         if timeout:
             timer = self._loop.add_calllater(timeout, on_timeout)
 
-        cb = partial(self.handle_events, future=f)
         while True:
-            self._loop.register(self._sock, self.events, cb)
-            chunk = yield f
+            chunk = yield self.read_from_fd()
             if chunk:
                 self._rbuf.append(chunk)
                 self._rbsize += len(chunk)
                 if self._rbsize >= n:
                     if timer:
                         self._loop.remove_timer(timer)
-                    return self._read_nbytes_from_buf(n)
+                    return self._pop_from_rbuf(n)
             else:
                 self.close()
                 if timer:
                     self._loop.remove_timer(timer)
                 raise errors.ConnectionClosed(self._addr)
-            f.clear()
-
+            
     @coroutine
     def read_until(self, regex: str, maxrange: int=None):
         maxrange = maxrange or 65535
@@ -278,19 +309,13 @@ class Connection(BaseHandler):
                 self.close()
                 raise errors.ConnectionClosed(self._addr)
 
-    @coroutine
     def write(self, data):
         self._wbuf.append(data)
         self._wbsize += len(data)
-        f = Future(True)
-        n = 0
-        while self._wbsize:
-            cb = partial(self.handle_events, future=f)
-            self._loop.register(self._sock, self.events, cb)
-            num = yield f
-            n += num
-        self._loop.unregister(self._sock)
-        return n
+        self.register(self.events)
+        f = Future()
+        self._wfut = f
+        return f
 
 
 class TCPServer(_ServerHandler):
@@ -336,11 +361,10 @@ class TCPClient(Connection):
         self._connected = False
         super().__init__(None, None, loop)
 
-    def on_connected(self, future: Future):
+    def on_connected(self):
         self._connected = True
-        future.set_result(None)
+        self._wfut.set_result(None)
 
-    @coroutine
     def connect(self, addr):
         family = utils.ip_type(addr[0])
         if not family:
@@ -349,27 +373,26 @@ class TCPClient(Connection):
         self._sock.setblocking(False)
         self._addr = (utils.tostr(addr[0]), addr[1])
         future = Future()
+        self._wfut = future
+        self.register(self._loop.WRITE)
         try:
             self._sock.connect(self._addr)
         except BlockingIOError:
             pass
-        cb = partial(self.handle_events, future=future)
-        self._loop.register(self._sock, self._loop.WRITE, cb)
-        yield future
-        self._loop.unregister(self._sock)
+        return future
 
-    def handle_events(self, sock, fd, events, future):
+    def handle_events(self, sock, fd, events):
         if events & self._loop.ERROR:
-            logging.warn("TCP: socket %s:%d error" % self._addr)
-            self.close()
+            self.on_error()
             return
         if events & self._loop.WRITE:
             if not self._connected:
-                self.on_connected(future)
+                self.on_connected()
             else:
-                self.on_write(future)
+                self.on_write()
         if events & self._loop.READ:
-            self.on_read(future)
+            self.on_read()
+        self.register(self.events)
 
 
 class UDPClient(BaseHandler):
@@ -380,7 +403,7 @@ class UDPClient(BaseHandler):
         super().__init__(loop)
         self._sock = sock
         self._addr = addr
-        self._future = None
+        self._rbuf = list()
         self._loop.register(self._sock, self._loop.READ, self.handle)
 
     def handle(self, sock, fd, events):
@@ -390,19 +413,36 @@ class UDPClient(BaseHandler):
         if events & self._loop.ERROR:
             self.close()
             logging.warn("UDP: socket %s:%d error" % self._addr)
-            self._future.cancel()
+            self._rfut.cancel((socket.error, None, None))
 
     def on_read(self, data, svr):
-        self._future.set_result((data, svr))
+        if self._rfut:
+            self._rfut.set_result((data, svr))
+        else:
+            self._rbuf.append((data, svr))
 
     def write(self, req, server):
         self._sock.sendto(req, server)
 
-    def read(self, timeout: int=0):
-        self._future = Future()
+    @coroutine
+    def read(self, timeout=0):
+        if self._rbuf:
+            future = Future()
+            res = self._rbuf.pop(0)
+            self._loop.add_callsoon(lambda: future.set_result(res))
+            yield future
+            return res
+        timer = None
         def on_timeout():
             self.close()
-            self._future.cancel((errors.TimeoutError, None, None))
+            self._rfut.cancel((errors.TimeoutError, None, None))
         if timeout:
-            self._loop.add_calllater(timeout, on_timeout)
-        return self._future
+            timer = self._loop.add_calllater(timeout, on_timeout)
+        res = yield self._read()
+        if timer:
+            self._loop.remove_timer(timer)
+        return res
+
+    def _read(self):
+        self._rfut = Future()
+        return self._rfut

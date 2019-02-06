@@ -3,6 +3,7 @@
 
 #include "mypydev.h"
 
+
 #define SBOX_LEN 256
 
 #define INIT_SBOX(s) unsigned char s[SBOX_LEN] = {\
@@ -36,7 +37,18 @@
 	}\
 }
 
-void RC4(unsigned char* key, int keylen, unsigned char* data, int datalen);
+#define RC4(key, keylen, data, datalen) {\
+	INIT_SBOX(s);\
+	MESS_SBOX(s, key, keylen)\
+	int i = 0, j = 0; \
+	for (int c = 0; c < datalen; c++){\
+		i = (i + 1) % SBOX_LEN; \
+		j = (j + s[i]) % SBOX_LEN; \
+		SWAP_BYTE(s[i], s[j])\
+		data[c] = data[c] ^ s[(s[i] + s[j]) % SBOX_LEN];\
+	}\
+}
+
 PyObject* PyRC4(PyObject* mod, PyObject* op);
 
 

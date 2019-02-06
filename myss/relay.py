@@ -1,4 +1,5 @@
 import struct
+import os
 import socket
 import logging
 from functools import lru_cache
@@ -65,12 +66,14 @@ class TCPRelayBase(Connection):
     def check_peer_direct(self, peerhost):
         if peerhost in self.pac:
             self.is_peer_direct = False
+        else:
+            self.is_peer_direct = True
         return self.is_peer_direct
         
     @coroutine
     def nego(self):
         try:
-            chunk = yield self.read_forever(timeout=20)
+            chunk = yield self.read_forever(timeout=60)
             yield self.write(self.nego_response())
             return True
         except errors.ConnectionClosed:
@@ -136,10 +139,10 @@ class TCPRelayBase(Connection):
         if not res:
             self.close()
             return
-
+        logging.debug("TCP: SYN complete with {:15s}:{:5d}".format(*self.peer._addr))
         while True:
             try:
-                chunk = yield self.read_forever(timeout=20)
+                chunk = yield self.read_forever(timeout=60)
                 logging.debug("TCP: recv {:6d} B from {:15s}:{:5d}".format(len(chunk), *self._addr))
                 if self.need_dencrypt():        
                     chunk = self.encryptor.encrypt(chunk, key)      # 这里encrypt==decrypt
@@ -147,14 +150,14 @@ class TCPRelayBase(Connection):
                 n = yield self.peer.write(chunk)
                 logging.debug("TCP: send {:6d} B to   {:15s}:{:5d}".format(n, *self.peer._addr))
 
-                resp = yield self.peer.read_forever(timeout=20)
+                resp = yield self.peer.read_forever(timeout=60)
                 logging.debug("TCP: recv {:6d} B from {:15s}:{:5d}".format(len(resp), *self.peer._addr))
 
                 if self.need_dencrypt():
                     resp = self.encryptor.decrypt(resp, key)        # 这里encrypt==decrypt
                 
                 n = yield self.write(resp)
-                logging.debug("TCP: send {:6d} B to   {:15s}:{:5d}".format(n, self._addr))
+                logging.debug("TCP: send {:6d} B to   {:15s}:{:5d}".format(n, *self._addr))
 
             except errors.ConnectionClosed as exc:
                 logging.warn("TCP: relay chain broken by {:15s}:{:5d}".format(*exc.by))
@@ -168,7 +171,7 @@ class TCPRelayBase(Connection):
     @coroutine
     def parse_header(self):
         n = 8 if self.LOCAL else 5
-        chunk = yield self.read_nbytes(n, timeout=20)
+        chunk = yield self.read_nbytes(n, timeout=60)
         if self.LOCAL:
             cmd = chunk[1]
             if cmd == self.CMD_UDPFWD:
@@ -183,7 +186,8 @@ class TCPRelayBase(Connection):
         h = socks5.parse_socks5_header(chunk)
         chunkpart = yield self.read_nbytes(0 - h.header_length, 20)
         if not self.LOCAL:
-            chunkpart = self.encryptor.decrypt(chunkpart, key)
+            tmp = os.urandom(n) + chunkpart
+            chunkpart = self.encryptor.decrypt(tmp, key)[n:]
         chunk += chunkpart
         sks = socks5.parse_socks5_header(chunk)
         return sks, chunk
@@ -267,7 +271,7 @@ class SocksUDPLocalRelay(SocksUDPRelay):
         yield self.create_peer(svr_addr[0], svr_addr[1], sks.atyp)
         
         self.peer.write(data, svr_addr)     # write encoded text to server
-        res, svr = yield self.peer.read(timeout=20)     # recv from server
+        res, svr = yield self.peer.read(timeout=60)     # recv from server
 
         logging.debug("UDP: recv {:6d} B from {:15s}:{:5d} ".format(len(res), *svr))
         if not res: return
@@ -303,7 +307,7 @@ class SocksUDPServerRelay(SocksUDPRelay):
         yield self.create_peer(svr_addr[0], svr_addr[1], sks.atyp)
         
         self.peer.write(data, svr_addr)     # send to target server
-        res, svr = yield self.peer.read(timeout=20) # recv from target server
+        res, svr = yield self.peer.read(timeout=60) # recv from target server
 
         logging.debug("UDP: recv {:6d} B from {:15s}:{:5d} ".format(len(res), *svr))
         if not res: return
