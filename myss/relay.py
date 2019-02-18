@@ -64,7 +64,7 @@ class TCPRelayBase(Connection):
         return (server_addr, server_port)
 
     def check_peer_direct(self, peerhost):
-        if peerhost in self.pac:
+        if peerhost in self.pac and self.LOCAL:
             self.is_peer_direct = False
         else:
             self.is_peer_direct = True

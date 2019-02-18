@@ -12,14 +12,13 @@ class Future(object):
     _CANCELLED = 2
     _FINISHED = -1
 
-    __slots__ = ["_callback", "_exc_info", "_result", "_status", "_reuse"]
+    __slots__ = ["_callback", "_exc_info", "_result", "_status"]
 
-    def __init__(self, reuse:bool=False):
+    def __init__(self):
         self._callback = self.print_excinfo
         self._exc_info = None
         self._result = None
         self._status = self._PENDING
-        self._reuse = reuse
 
     def print_excinfo(self, fut=None):
         fut = fut if fut else self
@@ -33,7 +32,6 @@ class Future(object):
         self._status = self._CANCELLED
         excinfo = excinfo or (errors.CancelledError, None, None)
         self.set_exc_info(excinfo)
-        self._reuse = False     # if cancelled, future can not be reused
 
     def done(self):
         return self._status == self._FINISHED
@@ -55,11 +53,8 @@ class Future(object):
     def set_done(self):
 
         if self._status == self._FINISHED:
-            if self._reuse:
-                self.clear()
-            else:
-                del self
-                return
+            del self
+            return
             
         cb = self._callback
         try:
@@ -68,12 +63,7 @@ class Future(object):
             print('Exception in callback %r for %r' % (cb, self))
 
         self._status = self._FINISHED
-        if not self._reuse:
-            self._callback = None
-
-    def clear(self):
-        """reset this future"""
-        self._status = self._PENDING
+        self._callback = None
 
 
 def _next(gen, future, value=None):
@@ -109,5 +99,4 @@ def coroutine(func):
         return future
 
     return wrapper
-
 

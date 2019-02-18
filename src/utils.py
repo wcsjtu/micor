@@ -1,4 +1,10 @@
 import socket
+import select
+
+def _has_ET():
+    return hasattr(select, "EPOLLET")
+
+has_ET = _has_ET()
 
 
 def errno_from_exception(e):

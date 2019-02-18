@@ -1,6 +1,7 @@
 ﻿import socket
 import errno
 import re
+import select
 import logging
 from collections import deque
 from functools import partial
@@ -152,6 +153,8 @@ class Connection(BaseHandler):
         e = self._loop.READ
         if self._wbsize:
             e |= self._loop.WRITE
+        if utils.has_ET:
+            e |= select.EPOLLET
         return e
 
     def on_read(self):
@@ -285,7 +288,7 @@ class Connection(BaseHandler):
     def read_until(self, regex: str, maxrange: int=None):
         maxrange = maxrange or 65535
         patt = re.compile(tobytes(regex))
-        f = Future(reuse=True)
+        f = Future()
         while True:
             cb = partial(self.handle_events, future=f)
             self._loop.register(self._sock, self.events, cb)

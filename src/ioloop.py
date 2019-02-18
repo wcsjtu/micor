@@ -182,9 +182,18 @@ class Timer(object):
         IOLoop.current().add_timer(self)
 
 
-def sleep(timeout):
+def sleep(t):
+    if t <= 0:
+        return sched()
     future = Future()
-    due = time.time() + timeout
+    due = time.time() + t
     timer = Timer(due, lambda: future.set_result(None))
     timer.register()
     return future
+
+def sched():
+    """release CPU and schedule other coroutines to run manually"""
+    future = Future()
+    loop = IOLoop.current()
+    loop.add_callsoon(lambda: future.set_result(None))
+    return future    
