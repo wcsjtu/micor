@@ -14,4 +14,9 @@
 PyObject *socket_inet_ntop(int af, char* buf, int buf_len);
 size_t unpack(char* sd, size_t n);
 
+
+void packs(unsigned char* buf, unsigned short v);
+void packl(unsigned char* buf, unsigned int v);
+void packll(unsigned char* buf, unsigned long long v);
+
 #endif

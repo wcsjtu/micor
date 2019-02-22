@@ -1,5 +1,13 @@
 #include "socketutil.h"
 
+#define PACK_INTEGER(buf, v, nbytes) {\
+	for(int i=0; i< nbytes;i++){\
+		*(buf + i) = (v >> ((nbytes - 1 - i) * 8)) & 0xff;\
+	}\
+}
+
+
+
 size_t unpack(char* sd, size_t n){
 	unsigned char* d = (unsigned char*)sd;
 	if (n == 1){
@@ -83,3 +91,26 @@ socket_inet_ntop(int af, char* buf, int buf_len){
 	return res;
 }
 #endif
+
+//大端序
+void packs(unsigned char* buf, unsigned short v){
+
+	//*buf = v >> 8;				//低位
+	//*(buf + 1) = v & 0x00ff;	//高位
+	PACK_INTEGER(buf, v, 2);
+
+}
+
+//大端序
+void packl(unsigned char* buf, unsigned int v){
+	/*const int sz = 4;
+	for (int i = 0; i < sz; i++){
+		*(buf + i) = (v >> ((sz - 1 - i) * 8)) & 0xff;
+	}*/
+	PACK_INTEGER(buf, v, 4);
+
+}
+
+void packll(unsigned char* buf, unsigned long long v){
+	PACK_INTEGER(buf, v, 8);
+}
