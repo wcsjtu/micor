@@ -19,6 +19,7 @@ class ICMPClient(BaseHandler):
             loop = IOLoop.current()
         super().__init__(loop)
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        self._sock.setblocking(False)
         self._rfut = None
         self.register()
 
