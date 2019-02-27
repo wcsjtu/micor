@@ -92,16 +92,16 @@ socket_inet_ntop(int af, char* buf, int buf_len){
 }
 #endif
 
-//´ó¶ËĞò
+//å¤§ç«¯åº
 void packs(unsigned char* buf, unsigned short v){
 
-	//*buf = v >> 8;				//µÍÎ»
-	//*(buf + 1) = v & 0x00ff;	//¸ßÎ»
+	//*buf = v >> 8;				//ä½ä½
+	//*(buf + 1) = v & 0x00ff;	//é«˜ä½
 	PACK_INTEGER(buf, v, 2);
 
 }
 
-//´ó¶ËĞò
+//å¤§ç«¯åº
 void packl(unsigned char* buf, unsigned int v){
 	/*const int sz = 4;
 	for (int i = 0; i < sz; i++){

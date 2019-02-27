@@ -23,7 +23,7 @@ SocksHeader_dealloc(SocksHeader* self);
 
 
 
-//´Ósocks5 Í·ÖĞ½âÎö³öÄ¿±êµÄĞÅÏ¢, ·µ»ØÒ»¸öSocksHeaderÀàÊµÀı
+//ä»socks5 å¤´ä¸­è§£æå‡ºç›®æ ‡çš„ä¿¡æ¯, è¿”å›ä¸€ä¸ªSocksHeaderç±»å®ä¾‹
 PyObject*
 parse_socks5_header(PyObject* self, PyObject* data);
 
