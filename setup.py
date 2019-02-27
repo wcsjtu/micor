@@ -1,6 +1,8 @@
 from distutils.core import setup, Extension
 import os
 
+os.chdir("./myss/parser")
+
 undef_macros = ["_DEBUG"]
 define_macros = []
 libraries = []
