@@ -90,7 +90,7 @@ class IOLoop:
 
     def remove_timer(self, timer):
         timer.callback = None
-        self._timer_cancels += 0
+        self._timer_cancels += 1
 
     def add_future(self, future, callback):
 
