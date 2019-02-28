@@ -82,11 +82,11 @@ class IOLoop:
 
     def add_calllater(self, delay: int, cb):
         timer = Timer(time.time() + delay, cb)
-        self._timers.append(timer)
+        heapq.heappush(self._timers, timer)
         return timer
 
     def add_timer(self, timer):
-        self._timers.append(timer)
+        heapq.heappush(self._timers, timer)
 
     def remove_timer(self, timer):
         timer.callback = None
