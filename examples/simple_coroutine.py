@@ -1,10 +1,11 @@
 from types import GeneratorType
 from functools import partial, wraps
+from collections import deque
 
 class Scheduler:
     def __init__(self):
-        self._ready = []
-        self._not_ready = []
+        self._ready = deque()
+        self._not_ready = deque()
 
     def add_callsoon(self, cb, *args, **kw):
         fn = partial(cb, *args, **kw)
@@ -12,7 +13,7 @@ class Scheduler:
 
     def run(self):
         while self._ready:
-            cb = self._ready.pop()
+            cb = self._ready.popleft()
             cb()
 
 scheduler = Scheduler()
