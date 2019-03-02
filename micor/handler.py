@@ -166,8 +166,9 @@ class Connection(BaseHandler):
                 errno.ETIMEDOUT, errno.EAGAIN, errno.EWOULDBLOCK):
                 return
         if self._rfut:
-            self._rfut.set_result(data)
+            fut = self._rfut
             self._rfut = None
+            fut.set_result(data)
         else:
             if not data:
                 self.close()
@@ -196,8 +197,9 @@ class Connection(BaseHandler):
                     logging.warn("TCP: Write error on %d: %s" % (self._sock.fileno(), exc))
                     break
         if self._wfut and not self._wbsize:
-            self._wfut.set_result(bytes_num)
-            #self._wfut = None
+            fut = self._wfut
+            self._wfut = None
+            fut.set_result(bytes_num)
 
     def on_error(self):
         logging.warn("TCP: socket %s:%d error" % self._addr)
