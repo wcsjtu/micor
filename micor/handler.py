@@ -3,6 +3,8 @@ import errno
 import re
 import select
 import logging
+import time
+import struct
 from collections import deque
 from functools import partial
 from .gen import Future, coroutine
@@ -10,6 +12,7 @@ from .utils import errno_from_exception, \
     merge_prefix, tobytes
 from .ioloop import IOLoop, Timer
 from .import errors,utils
+from .resolvers.poll import resolver
 
 
 class BaseHandler:
@@ -40,6 +43,18 @@ class BaseHandler:
             cb = self.handle
         self._loop.register(self._sock, events, cb)
 
+    @coroutine
+    def getaddrinfo(self, 
+                    host: str, 
+                    port: int, 
+                    family: int=0, 
+                    type: int=0, 
+                    proto: int=0, 
+                    flags: int=0,
+                    timeout: int=0):
+        res = yield resolver.getaddrinfo(host, port, family, type, proto, flags, timeout)
+        return res
+
 
 class _ServerHandler(BaseHandler):
 
@@ -54,21 +69,19 @@ class _ServerHandler(BaseHandler):
         super().__init__(loop)
         self._addr = (ip, port)
         self.backlog = backlog
-        self._sock = self.create_sock(**sockopt)
+        
         self.register()
 
-    def create_sock(self, **sockopt):
-        addrs = self.getaddrinfo()
-        af, socktype, proto, canonname, sa = addrs[0]
-
-        sock = socket.socket(af, socktype, proto)
+    def create_sock(self, ip, port, socktype, proto, **sockopt):
+        family = utils.ip_type(ip)
+        if not family:
+            raise ValueError("invalid ip address %s" % ip)
+        
+        sock = socket.socket(family, socktype, proto)
         sock = self.set_socketopt(sock, **sockopt)
-        sock.bind(tuple(sa))
+        sock.bind((ip, port))
         sock.setblocking(False)
         return sock
-
-    def getaddrinfo(self):
-        raise NotImplementedError("duty of subclass")
 
     def set_socketopt(self, sock, **opt):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -99,14 +112,9 @@ class UDPServer(_ServerHandler):
     def __init__(self, ip, port, conn_cls=Datagram,  loop=None, **sockopt):
         super().__init__(ip, port, None, loop, **sockopt)
         self.conn_cls = conn_cls
-
-    def getaddrinfo(self):
-        addrs = socket.getaddrinfo(
-            self._addr[0], self._addr[1], 
-            type=socket.SOCK_DGRAM, proto=socket.SOL_UDP)
-        if not addrs:
-            raise Exception("can't get addrinfo for %s:%d" % self._addr)
-        return addrs
+        self._sock = self.create_sock(
+            ip, port, socket.SOCK_DGRAM, socket.SOL_UDP, **sockopt
+            )
 
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
@@ -120,7 +128,7 @@ class UDPServer(_ServerHandler):
 
             self._loop.add_future(future, lambda f: f.print_excinfo())
         except (OSError, IOError) as exc:
-            logging.warn("UDP: accept error: ", exc)
+            logging.warn("UDP: accept error: %s" % exc)
 
     @coroutine
     def handle_datagram(self, datagram, addr):
@@ -286,33 +294,6 @@ class Connection(BaseHandler):
                     self._loop.remove_timer(timer)
                 raise errors.ConnectionClosed(self._addr)
             
-    @coroutine
-    def read_until(self, regex: str, maxrange: int=None):
-        maxrange = maxrange or 65535
-        patt = re.compile(tobytes(regex))
-        f = Future()
-        while True:
-            cb = partial(self.handle_events, future=f)
-            self._loop.register(self._sock, self.events, cb)
-            chunk = yield f
-            if chunk:
-                self._rbuf.append(chunk)
-                self._rbsize += len(chunk)
-                merge_prefix(self._rbuf, maxrange)
-                m = patt.search(self._rbuf[0])
-                if m:
-                    endpos = m.end()
-                    merge_prefix(self._rbuf, endpos)
-                    data = self._rbuf.popleft()
-                    self._rbsize -= endpos
-                    return data
-                else:
-                    if len(self._rbuf[0]) >= maxrange:
-                        raise errors.ConnectionClosed(
-                            ("[::]", 0), "Entity Too Large")
-            else:
-                self.close()
-                raise errors.ConnectionClosed(self._addr)
 
     def write(self, data):
         self._wbuf.append(data)
@@ -329,16 +310,11 @@ class TCPServer(_ServerHandler):
             backlog=128, loop=None, 
             conn_cls=Connection, **sockopt):
         super().__init__(ip, port, backlog, loop, **sockopt)
+        self._sock = self.create_sock(
+            ip, port, socket.SOCK_STREAM, socket.SOL_TCP, **sockopt
+            )
         self._sock.listen(self.backlog)
         self.conn_class = conn_cls
-
-    def getaddrinfo(self):
-        addrs = socket.getaddrinfo(
-            self._addr[0], self._addr[1], 
-            type=socket.SOCK_STREAM, proto=socket.SOL_TCP)
-        if not addrs:
-            raise Exception("can't get addrinfo for %s:%d" % self._addr)
-        return addrs
 
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
@@ -352,7 +328,7 @@ class TCPServer(_ServerHandler):
             self._loop.add_future(future, lambda f: f.print_excinfo())
 
         except (OSError, IOError) as exc:
-            logging.warn("TCP: accept error: ", exc)
+            logging.warn("TCP: accept error: %s" % exc)
 
     @coroutine
     def handle_conn(self, conn, addr):
@@ -365,19 +341,22 @@ class TCPClient(Connection):
         loop = IOLoop.current()
         self._connected = False
         super().__init__(None, None, loop)
+        self._connect_timer = None
 
     def on_connected(self):
         self._connected = True
         self._wfut.set_result(None)
-
-    def connect(self, addr):
-        family = utils.ip_type(addr[0])
-        if not family:
-            raise ValueError("hostname not support!")
-        self._sock = socket.socket(family, socket.SOCK_STREAM)
+    
+    def _inline_connect(self, family, type, proto, addr, timeout):
+        self._sock = socket.socket(family, type, proto)
         self._sock.setblocking(False)
-        self._addr = (utils.tostr(addr[0]), addr[1])
+        self._addr = addr
         future = Future()
+
+        self._connect_timer = self._loop.add_calllater(timeout, lambda: future.cancel(
+            (errors.TimeoutError, None, None)
+        ))
+
         self._wfut = future
         self.register(self._loop.WRITE)
         try:
@@ -385,6 +364,23 @@ class TCPClient(Connection):
         except BlockingIOError:
             pass
         return future
+
+    @coroutine
+    def connect(self, addr, timeout=30):
+        start = time.time()
+        sa = yield self.getaddrinfo(*addr, timeout=timeout)
+        timeout -= (time.time() - start)
+        for family, type, proto, addr in sa:
+            now = time.time()
+            if timeout <= 0:
+                raise errors.TimeoutError()
+            try:
+                yield self._inline_connect(family, type, proto, addr, timeout)
+                break
+            except errors.TimeoutError:
+                timeout -= (time.time() - now)
+        self._connect_timer.cancel()
+        self._connect_timer = None
 
     def handle_events(self, sock, fd, events):
         if events & self._loop.ERROR:
@@ -451,67 +447,3 @@ class UDPClient(BaseHandler):
     def _read(self):
         self._rfut = Future()
         return self._rfut
-
-
-class ICMPClient(BaseHandler):
-
-    def __init__(self, loop=None):
-        if not loop:
-            loop = IOLoop.current()
-        super().__init__(loop)
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-        self._rfut = None
-        self.register()
-
-    @coroutine
-    def ping(self, dst, timeout=2):
-
-        if not ip_type(dst):
-            future =  resolver.getaddrinfo(dst, 0, proto=socket.IPPROTO_ICMP)
-            start = time.time()
-            timer = self._loop.add_calllater(timeout,
-                    lambda: future.cancel((errors.TimeoutError, None, None))
-                )
-            res = yield future
-            self._loop.remove_timer(timer)
-            timeout -= (time.time() - start)
-            family, tp, proto, cn, sa = res[0]
-        else:
-            sa = (dst, 0)
-
-        ts = struct.pack("!Q", int(time.time()*1000))
-        pkg = cares.build_ping_pkg(ts, 1, 1)
-        self._sock.sendto(pkg, sa)
-        
-        future = self.recvfrom()
-        timer = self._loop.add_calllater(
-            timeout,lambda: future.cancel((errors.TimeoutError, None, None)))
-        res, svr = yield future
-        self._loop.remove_timer(timer)
-
-        frame = cares.parse_ping_pkg(res)
-        rtt = time.time()*1000 - struct.unpack("!Q", frame.data)[0]
-        print("8 bytes from %s: icmp_seq=1 ttl=%d time=%fms" % (svr[0], frame.ip_ttl, rtt))
-
-
-    def handle(self, sock, fd, events):
-        if events & self._loop.ERROR:
-            print("icmp socket eroor")
-            self.close()
-        if events& self._loop.READ:
-            self.on_read()
-
-    def on_read(self):
-        res = self._sock.recvfrom(65535)
-        if self._rfut:
-            self._rfut.set_result(res)
-
-    def close(self):
-        self._sock.close()
-        self._rfut = None
-        self._loop.unregister(self._sock)
-
-    def recvfrom(self):
-        future = Future()
-        self._rfut = future
-        return future
