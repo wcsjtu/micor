@@ -127,7 +127,7 @@ class IOLoop:
 
     def stop(self):
         self._stop = True
-        self._ready = None
+        self._ready = deque()
         self._timers = list()
         self._fds = dict()
         self._impl.close()
@@ -192,6 +192,9 @@ class Timer(object):
 
     def register(self):
         IOLoop.current().add_timer(self)
+
+    def cancel(self):
+        IOLoop.current().remove_timer(self)
 
 
 def sleep(t):
