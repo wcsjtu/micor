@@ -180,8 +180,9 @@ class Connection(BaseHandler):
         else:
             if not data:
                 self.close()
-            # self._rbuf.append(data)
-            # self._rbsize += len(data)
+            else:
+                self._rbuf.append(data)
+                self._rbsize += len(data)
 
     def on_write(self):
         bytes_num = 0
@@ -371,7 +372,7 @@ class TCPClient(Connection):
         start = time.time()
         sa = yield self.getaddrinfo(*addr, type=socket.SOCK_STREAM, timeout=timeout)
         timeout -= (time.time() - start)
-        for family, type, proto, cn, addr in sa:
+        for family, type, proto, _, addr in sa:
             now = time.time()
             if timeout <= 0:
                 raise errors.TimeoutError()
