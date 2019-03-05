@@ -143,8 +143,8 @@ class AsyncResolver:
         res = dict()        # family: [iplist]
         family = ip_type(host)
         if family:
-            qt = self._FAMILY2QTYPE[family]
-            res = {qt: [host]}
+            qtype = self._FAMILY2QTYPE[family]
+            res = {qtype: [host]}
         else:
             res = self._resolved.get(host, DNSParser.QTYPE_A | DNSParser.QTYPE_AAAA)
 
@@ -222,6 +222,7 @@ class AsyncResolver:
             logging.warn("DNS: no wait queue found, but received a response with transaction id %d" % tid)
             return
         try:
+            print(data)
             hostname, qtype, rrs = DNSParser(data).parse_response()
         except Exception as e:
             logging.warn("DNS: parse dns response error: %s" % str(e), exc_info=True)
