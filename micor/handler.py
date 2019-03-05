@@ -70,8 +70,6 @@ class _ServerHandler(BaseHandler):
         self._addr = (ip, port)
         self.backlog = backlog
         
-        self.register()
-
     def create_sock(self, ip, port, socktype, proto, **sockopt):
         family = utils.ip_type(ip)
         if not family:
@@ -115,6 +113,7 @@ class UDPServer(_ServerHandler):
         self._sock = self.create_sock(
             ip, port, socket.SOCK_DGRAM, socket.SOL_UDP, **sockopt
             )
+        self.register()
 
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
@@ -155,6 +154,7 @@ class Connection(BaseHandler):
         super().close()
         self._closed = True
         self._wbuf, self._rbuf = deque(), deque()
+        self._wbsize, self._rbsize = 0, 0
 
     @property
     def events(self):
@@ -180,8 +180,8 @@ class Connection(BaseHandler):
         else:
             if not data:
                 self.close()
-            self._rbuf.append(data)
-            self._rbsize += len(data)
+            # self._rbuf.append(data)
+            # self._rbsize += len(data)
 
     def on_write(self):
         bytes_num = 0
@@ -314,6 +314,7 @@ class TCPServer(_ServerHandler):
             ip, port, socket.SOCK_STREAM, socket.SOL_TCP, **sockopt
             )
         self._sock.listen(self.backlog)
+        self.register()
         self.conn_class = conn_cls
 
     def handle(self, sock, fd, events):
@@ -368,9 +369,9 @@ class TCPClient(Connection):
     @coroutine
     def connect(self, addr, timeout=30):
         start = time.time()
-        sa = yield self.getaddrinfo(*addr, timeout=timeout)
+        sa = yield self.getaddrinfo(*addr, type=socket.SOCK_STREAM, timeout=timeout)
         timeout -= (time.time() - start)
-        for family, type, proto, addr in sa:
+        for family, type, proto, cn, addr in sa:
             now = time.time()
             if timeout <= 0:
                 raise errors.TimeoutError()
