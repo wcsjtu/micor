@@ -131,7 +131,10 @@ class AsyncResolver:
         except IOError:
             pass
         if not self._dnsservers:
-            self._dnsservers = ['8.8.8.8', '10.246.3.34', '10.246.3.33']
+            self._dnsservers = ['8.8.8.8']
+
+    def set_server(self, serverlist):
+        self._dnsservers = serverlist
 
     def _addr_from_cache(self, host: bytes, qtype: int):
         """`coroutine`. Get IP address informations from cache, return tuple with 
