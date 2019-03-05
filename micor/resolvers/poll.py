@@ -5,7 +5,7 @@ from micor import IOLoop, Future, coroutine
 from micor.utils import ip_type
 from micor.sync import Queue, Empty
 from .dnsparser import DNSParser, RR
-from micor import errors
+from micor import errors, utils
 
 
 class NamedList:
@@ -212,7 +212,7 @@ class AsyncResolver:
         res = []
         for qt, ips in typed_ips.items():
             fm = self._QTYPE2FAMILY[qt]
-            res += [(fm, type, proto, "", (ip, port)) for ip in ips]
+            res += [(fm, type, proto, "", (utils.tostr(ip), port)) for ip in ips]
         return res
 
     def on_read(self, data: bytes):
