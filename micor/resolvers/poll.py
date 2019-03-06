@@ -222,7 +222,6 @@ class AsyncResolver:
             logging.warn("DNS: no wait queue found, but received a response with transaction id %d" % tid)
             return
         try:
-            print(data)
             hostname, qtype, rrs = DNSParser(data).parse_response()
         except Exception as e:
             logging.warn("DNS: parse dns response error: %s" % str(e), exc_info=True)
