@@ -238,12 +238,17 @@ class AsyncResolver:
             elif rr.qtype == DNSParser.QTYPE_AAAA and rr.qcls == DNSParser.QCLASS_IN:
                 ipv6s.append(rr.value)
 
+        item = None
         if qtype & DNSParser.QTYPE_A:
-            self._resolved.set_list(hostname, ipv4s, DNSParser.QTYPE_A)
-            queue.put({DNSParser.QTYPE_A: ipv4s})
+            if ipv4s:
+                self._resolved.set_list(hostname, ipv4s, DNSParser.QTYPE_A)
+                item = {DNSParser.QTYPE_A: ipv4s}
+            queue.put(item)
         if qtype & DNSParser.QTYPE_AAAA:
-            self._resolved.set_list(hostname, ipv6s, DNSParser.QTYPE_AAAA)
-            queue.put({DNSParser.QTYPE_AAAA: ipv6s})
+            if ipv6s:
+                self._resolved.set_list(hostname, ipv6s, DNSParser.QTYPE_AAAA)
+                item = {DNSParser.QTYPE_AAAA: ipv6s}
+            queue.put(item)
 
     def handle(self, sock, fd, events):
         if events & self._loop.ERROR:
