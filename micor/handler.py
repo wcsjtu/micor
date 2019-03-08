@@ -381,7 +381,8 @@ class TCPClient(Connection):
                 break
             except errors.TimeoutError:
                 timeout -= (time.time() - now)
-        self._connect_timer.cancel()
+        if self._connect_timer:
+            self._connect_timer.cancel()
         self._connect_timer = None
 
     def handle_events(self, sock, fd, events):
