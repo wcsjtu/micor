@@ -146,10 +146,12 @@ class AsyncResolver:
             qtype = self._FAMILY2QTYPE[family]
             res = {qtype: [host]}
         else:
-            res = self._resolved.get(host, DNSParser.QTYPE_A | DNSParser.QTYPE_AAAA)
+            res = self._resolved.get(host, qtype)
 
-        for qt in res:
-            qtype ^= qt     # 检查是否还缺少v4或者v6
+        # for qt in res:
+        #     qtype ^= qt     # 检查是否还缺少v4或者v6
+        
+        qtype = 0 if res else qtype     # 只要命中缓存，就不查询DNS，不管是否缺少v4/v6
         
         self._loop.add_callsoon(lambda: future.set_result((res, qtype)))
         return future
@@ -205,7 +207,7 @@ class AsyncResolver:
                     typed_ips.update(resolved)
             self._queues.pop(tid, None)
         else:
-            logging.debug("DNS: %s hit cache" % host)
+            logging.debug("DNS: [hit cache] %s" % host)
 
         if not typed_ips:
             raise socket.gaierror("getaddrinfo failed: %s" % host)
