@@ -4,6 +4,38 @@ from types import GeneratorType
 import traceback
 from . import errors
 
+def print_exception(tp, val, tb):
+    import linecache
+    fnames = set()
+    tmp = []
+    for f, lineno in traceback.walk_tb(tb):
+        co = f.f_code
+        filename = co.co_filename
+        name = co.co_name
+
+        if filename.endswith(__file__):
+            continue
+
+        fnames.add(filename)
+        linecache.lazycache(filename, f.f_globals)
+        tmp.append((filename, lineno, name))
+
+    for filename in fnames:
+        linecache.checkcache(filename)
+
+    print("Traceback (most recent call last):", file=sys.stderr)
+    for filename, lineno, name in tmp:
+        srccode = linecache.getline(filename, lineno).strip()
+        print(
+            "  File \"%s\", line %d, in %s\n    %s\n" % (
+                filename, lineno, name, srccode),
+            file=sys.stderr, end=""
+                )
+    tpv = tp.__qualname__
+    smod = tp.__module__
+    if smod not in ("__main__", "builtins"):
+        tpv = smod + '.' + tpv + ":"
+    print(tpv, val, file=sys.stderr)
 
 class Future(object):
 
@@ -24,7 +56,7 @@ class Future(object):
         fut = fut if fut else self
         if fut._exc_info:
             tp, val, tb = fut._exc_info
-            traceback.print_exception(tp, val, tb, chain=False)
+            print_exception(tp, val, tb)
 
     def cancel(self, excinfo=None):
         if self.done():
