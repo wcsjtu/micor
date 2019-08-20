@@ -1,4 +1,4 @@
-﻿#ifndef _PING_H
+#ifndef _PING_H
 #define _PING_H
 
 #include "mypydev.h"

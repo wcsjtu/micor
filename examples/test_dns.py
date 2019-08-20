@@ -3,8 +3,8 @@ import sys
 sys.path.insert(0, "..")
 
 from myss.resolver import AsyncResolver
-from src.gen import coroutine, Future
-from src import IOLoop
+from micor.gen import coroutine, Future
+from micor import IOLoop
 
 @coroutine
 def test():

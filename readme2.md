@@ -303,7 +303,7 @@ class IOLoop:
                 cb(key.fileobj, mask)
 ```
 
-现在就把之前的调度器, 与IO完美的结合在一起了。 这部分完整的代码在[src/ioloop.py](src/ioloop.py)里, 和这里的代码稍微有点不一样, 因为没有用selectors模块。
+现在就把之前的调度器, 与IO完美的结合在一起了。 这部分完整的代码在[micor/ioloop.py](micor/ioloop.py)里, 和这里的代码稍微有点不一样, 因为没有用selectors模块。
 
 那么, 还是那个经典的问题: 这玩意有什么用？
 

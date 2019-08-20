@@ -3,11 +3,12 @@ import os
 import socket
 import logging
 from functools import lru_cache
-from . import encryptor, pac, resolver, socks5
+from . import encryptor, pac, socks5
 
-from src import TCPClient, coroutine, \
+from micor import TCPClient, coroutine, \
     Connection, IOLoop, Datagram, UDPClient
-from src import errors, utils
+from micor import errors, utils
+from micor.resolvers.poll import resolver
 
 local_addr = "127.0.0.1"
 local_port = 1080
@@ -41,19 +42,16 @@ class TCPRelayBase(Connection):
         self.peer = None
         self.encryptor = encryptor
         self.pac = pac.rules
-        self.resolver = resolver.resolver
+        self.resolver = resolver
         self.is_peer_direct = not self.LOCAL    # 与peer是否直连, server肯定是直连, local要看情况
                                                 # 在pac中的就不是直连, 不在的就是直连
 
     @coroutine
-    def create_peer(self, addr: str, port: int, atyp: int):
-        family = socks5.atyp2family(atyp)
-        info = yield self.resolver.getaddrinfo(addr, port, family)
-        af, socktype, proto, canonname, sa = info[0]
-        logging.debug("TCP: host %s resovled: %s" % (addr, sa[0]))
+    def create_peer(self, host: str, port: int, atyp: int):
+        addr = (host, port)
         conn = TCPClient()
-        yield conn.connect(sa)
-        logging.debug("TCP: create tcp connect to %s:%d" % sa)
+        yield conn.connect(addr)
+        logging.debug("TCP: create tcp connect to %s:%d" % addr)
         self.peer = conn
         return conn
 
@@ -221,7 +219,7 @@ class SocksUDPRelay(Datagram):
         self.peer = None
         self.encryptor = encryptor
         self.pac = pac.rules
-        self.resolver = resolver.resolver
+        self.resolver = resolver
         self.is_direct = False
 
     def get_server(self, host: str, port: int):
@@ -231,8 +229,9 @@ class SocksUDPRelay(Datagram):
     def create_peer(self, host: str, port: int, atyp: int):
         family = socks5.ATYP_TO_FAMILY[atyp]
         info = yield self.resolver.getaddrinfo(host, port, family)
-        af, socktype, proto, canonname, sa = info[0]
-        self.peer = udp_client(sa[0], sa[1], family)
+        af, _, _, _, sa = info[0]
+        logging.debug("UDP: %s resolved into %s" % (host, sa[0]))
+        self.peer = udp_client(sa[0], sa[1], af)
         return self.peer
 
     @coroutine

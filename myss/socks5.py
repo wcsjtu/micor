@@ -2,7 +2,7 @@
 import struct
 import socket
 from .parser import parse_socks5_header, SocksHeader
-from src.utils import ip_type
+from micor.utils import ip_type
 
 
 def ack(addr: str, port: int) -> bytes:

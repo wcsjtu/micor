@@ -3,9 +3,9 @@ import time
 import sys
 sys.path.insert(0, "..")
 
-from src.sync import Lock
-from src.gen import coroutine
-from src.ioloop import IOLoop, sleep
+from micor.sync import Lock
+from micor.gen import coroutine
+from micor.ioloop import IOLoop, sleep
 
 
 lock = Lock()

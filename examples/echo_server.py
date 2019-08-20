@@ -2,10 +2,10 @@
 import sys
 sys.path.insert(0, "..")
 
-from src.ioloop import IOLoop, sleep
-from src.gen import Future, coroutine
-from src.handler import TCPServer, Connection, TCPClient
-from src.utils import tobytes
+from micor.ioloop import IOLoop, sleep
+from micor.gen import Future, coroutine
+from micor.handler import TCPServer, Connection, TCPClient
+from micor.utils import tobytes
 
 
 class EchoServer(TCPServer):

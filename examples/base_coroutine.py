@@ -3,8 +3,8 @@
 import sys
 sys.path.insert(0, "..")
 
-from src.gen import coroutine
-from src.ioloop import IOLoop, sleep
+from micor.gen import coroutine
+from micor.ioloop import IOLoop, sleep
 
 
 case1 = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10]

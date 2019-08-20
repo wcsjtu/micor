@@ -6,9 +6,9 @@ import cares
 sys.path.insert(0, ".")
 sys.path.insert(0, "..")
 
-from src.handler import BaseHandler
-from src import Future, coroutine, IOLoop, errors
-from src.utils import ip_type
+from micor.handler import BaseHandler
+from micor import Future, coroutine, IOLoop, errors
+from micor.utils import ip_type
 from myss.resolver import resolver
 
 
@@ -19,6 +19,7 @@ class ICMPClient(BaseHandler):
             loop = IOLoop.current()
         super().__init__(loop)
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        self._sock.setblocking(False)
         self._rfut = None
         self.register()
 

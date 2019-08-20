@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 sys.path.insert(0, ".")
 
-from src import IOLoop, coroutine, TCPServer, UDPServer
+from micor import IOLoop, coroutine, TCPServer, UDPServer
 from myss.relay import SocksTCPLocalRelay, SocksUDPLocalRelay
 
 

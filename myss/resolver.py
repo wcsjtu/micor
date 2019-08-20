@@ -1,10 +1,10 @@
 #coding:utf-8
 import os, socket, sys, struct, logging
-from src import BaseHandler, IOLoop, Future, coroutine
-from src.utils import ip_type
+from micor import BaseHandler, IOLoop, Future, coroutine
+from micor.utils import ip_type
 from .parser import DNSParser, RR
 from .logger import logger
-from src import errors
+from micor import errors
 
 class AsyncResolver(BaseHandler):
 
