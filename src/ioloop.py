@@ -1,4 +1,5 @@
 ﻿import select
+import heapq
 import time
 from functools import partial
 from collections import defaultdict, deque
@@ -71,6 +72,7 @@ class IOLoop:
         self._stop = False
         self._ready = deque()
         self._timers = list()
+        self._timer_cancels = 0
         self._fds = dict()
         self._impl = PollImpl()
 
@@ -87,7 +89,8 @@ class IOLoop:
         self._timers.append(timer)
 
     def remove_timer(self, timer):
-        self._timers.remove(timer)
+        timer.callback = None
+        self._timer_cancels += 0
 
     def add_future(self, future, callback):
 
@@ -128,6 +131,7 @@ class IOLoop:
         self._timers = list()
         self._fds = dict()
         self._impl.close()
+        self._timer_cancels = 0
 
     def run_ready(self):
         while self._ready:
@@ -135,15 +139,23 @@ class IOLoop:
             cb()
 
     def check_due_timer(self):
-        now = time.time()
-        todo = []
-        while self._timers:
-            timer = self._timers.pop()
-            if timer.due <= now:
-                self._ready.append(timer.callback)
-            else:
-                todo.append(timer)
-        self._timers = todo
+
+        if self._timers:
+            now = time.time()
+            while self._timers:
+                if self._timers[0].callback is None:
+                    heapq.heappop(self._timers)
+                    self._timer_cancels -= 1
+                elif self._timers[0].due <= now:
+                    self._ready.append(heapq.heappop(self._timers).callback)
+                else:
+                    break
+            
+            if (self._timer_cancels > 512 and 
+                    self._timer_cancels > (len(self._timers) >> 1)):
+                self._timer_cancels = 0
+                self._timers = [t for t in self._timers if t.callback is not None]
+                heapq.heapify(self._timers)
 
     def run(self):
         while not self._stop:
@@ -154,9 +166,9 @@ class IOLoop:
             if self._ready:
                 timeout = 0
             elif self._timers:
-               self._timers.sort()
                delta = self._timers[0].due - time.time()
                timeout = max(0, delta)
+
             events = self._impl.poll(timeout=timeout)
             for fd, event in events:
                 sock, mode, handler = self._fds.get(fd, self.DEFAULT_HANDLER)
