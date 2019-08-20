@@ -107,13 +107,13 @@ static void ICMPFrame_dealloc(PyICMPFrame* self){
 PyDoc_STRVAR(PyICMP_doc, 
 	"frame struction of ICMP is\n\
 	\n\
-	0        7        15       23       31\n\
-	+--------+--------+--------+--------+\n\
-	|  type  |  code  |     checksum    |\n\
-	+--------+--------+--------+--------+\n\
-	|       ID        |     sequence    |\n\
-	+--------+--------+--------+--------+\n\
-	|           DATA(optional)          |\n\
+	0        7        15       23       31\n\n\
+	+--------+--------+--------+--------+\n\n\
+	|  type  |  code  |     checksum    |\n\n\
+	+--------+--------+--------+--------+\n\n\
+	|       ID        |     sequence    |\n\n\
+	+--------+--------+--------+--------+\n\n\
+	|           DATA(optional)          |\n\n\
 	+--------+--------+--------+--------+");
 
 
@@ -176,11 +176,11 @@ PyObject* PyParse_ping_pkg(PyObject* self, PyObject* v){
 		PyErr_SetString(PyExc_TypeError, "a bytes object is required");
 		return NULL;
 	}
-	size_t nleft = Py_SIZE(v) - ICMP_HEADER_LENGTH - IP_HEADER_LENGTH;
+	//printf("ICMP_HEADER_LENGTH = %d    IP_HEADER_LENGTH = %d\n", ICMP_HEADER_LENGTH, IP_HEADER_LENGTH);
+	int nleft = ((PyBytesObject*)v)->ob_base.ob_size - ICMP_HEADER_LENGTH - IP_HEADER_LENGTH;
 	char* buf = ((PyBytesObject*)v)->ob_sval + IP_HEADER_LENGTH;
 	ICMPHeader* icmpheader = (ICMPHeader*)buf;
 	IPHeader* ipheader = (IPHeader*)(((PyBytesObject*)v)->ob_sval);
-
 	if (nleft < 0){
 		PyErr_SetString(PyExc_ValueError, "parameter is too short");
 		return NULL;
@@ -199,6 +199,7 @@ PyObject* PyParse_ping_pkg(PyObject* self, PyObject* v){
 	frame->ip_src_addr = ntohl(ipheader->src_addr);
 
 	if (nleft > 0){
+		
 		PyBytesObject* data = (PyBytesObject*)PyBytes_FromSize(nleft, 1);
 		if (data == NULL){
 			ICMPFrame_dealloc((PyICMPFrame*)self);

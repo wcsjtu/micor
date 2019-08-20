@@ -21,8 +21,8 @@ typedef struct _iphdr{
 	unsigned char ttl;			// 生存时间(8)
 	unsigned char protocol;		// 协议(8)
 	unsigned short checksum;	// 生存时间(16)
-	unsigned long src_addr;		// 源IP地址(32)
-	unsigned long dst_addr;		// 目的IP地址(32)
+	unsigned int src_addr;		// 源IP地址(32)
+	unsigned int dst_addr;		// 目的IP地址(32)
 } IPHeader, *pIPHeader;
 
 
@@ -59,8 +59,8 @@ typedef struct _PyICMP{
 	unsigned short id;			// 标识(16)
 	unsigned short seq;			// 序列号(16)
 	unsigned char ip_ttl;		// ip层的生存时间
-	unsigned long ip_src_addr;
-	unsigned long ip_dst_addr;
+	unsigned int ip_src_addr;
+	unsigned int ip_dst_addr;
 	PyBytesObject* data;
 } PyICMPFrame;
 
@@ -78,7 +78,7 @@ PyDoc_STRVAR(bpp_doc,
 	`seq` is sequence of ICMP headers, type is `unsigned short`");
 
 PyDoc_STRVAR(ppp_doc, 
-	"parse_ping_pkg(v: bytes) -> IMCPFrame instance\n\
+	"parse_ping_pkg(v: bytes) -> ICMPFrame instance\n\
 	");
 
 
