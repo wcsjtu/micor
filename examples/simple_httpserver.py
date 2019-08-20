@@ -1,13 +1,13 @@
 #coding:utf-8
 import sys
-sys.path.insert(0, "..")
+sys.path.insert(0, ".")
 
 from urllib.parse import urlsplit
 from src.ioloop import IOLoop, sleep
 from src.gen import Future, coroutine
 from src.handler import TCPServer, Connection, TCPClient
 from src.utils import tobytes
-from src.errors import ConnectionClosed
+from src.errors import ConnectionClosed, TimeoutError
 
 class SimpleHTTPServer(TCPServer):
 
@@ -25,10 +25,12 @@ class SimpleHTTPServer(TCPServer):
     def handle_conn(self, conn, addr):
         while True:
             try:
-                data = yield conn.read_until(b'\r\n\r\n')
+                data = yield conn.read_until(b"\r\n\r\n")
                 res = self.response_builder(200, b"hello world")
                 yield conn.write(res)
             except ConnectionClosed:
+                break
+            except TimeoutError:
                 break
         return 0
 
